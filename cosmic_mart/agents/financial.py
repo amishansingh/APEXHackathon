@@ -43,11 +43,13 @@ class FinancialReportAgent:
         per_unit_daily_loss = assessment.daily_loss.total_usd / max(1, assessment.units_excess)
 
         if action.action == ActionType.TRANSFER:
-            # Clearing to a market that wants the stock avoids the full bleed and
-            # realises full margin instead of a write-down.
+            # Only avoided holding loss is counted. An earlier version also credited
+            # a share of unit margin for selling into live demand, but that assumes
+            # the units would otherwise never sell at all, which the loss data does
+            # not support -- it double-counts value the holding-loss term already
+            # captures.
             days_avoided = min(90.0, assessment.days_of_cover)
             gross = action.units * per_unit_daily_loss * days_avoided
-            gross += action.units * (sku.unit_price_usd - sku.unit_cost_usd) * 0.15
             # Freight, handling and customs, scaled by unit value.
             cost = action.units * (2.5 + sku.unit_cost_usd * 0.04)
         elif action.action == ActionType.DISCOUNT:

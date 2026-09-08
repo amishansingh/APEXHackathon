@@ -26,8 +26,10 @@ class Settings:
     # set it too low and carbon can never change a verdict.
     carbon_price_usd_per_point: float = 300.0
 
-    # Net score bands that separate approve / flag / block.
-    approve_threshold_usd: float = 25_000.0
+    # Net score bands that separate approve / flag / block. Calibrated against the
+    # conservative benefit figures the financial agent actually produces; set it
+    # above those and nothing can ever clear a straight approval.
+    approve_threshold_usd: float = 15_000.0
     block_threshold_usd: float = 0.0
 
     # A forecast this uncertain goes to a human regardless of the numbers. Set it

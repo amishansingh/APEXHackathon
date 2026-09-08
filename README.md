@@ -65,6 +65,9 @@ cp .env.example .env      # then fill in ANTHROPIC_API_KEY
 python -m cosmic_mart.cli run --limit 6
 ```
 
+Behind a proxy or course-issued gateway, also set `ANTHROPIC_BASE_URL` in `.env` — the SDK
+picks it up automatically, no code change needed.
+
 Other commands:
 
 ```bash
@@ -123,6 +126,7 @@ wrong in an obvious direction before being tuned against real runs:
 | `carbon_price_usd_per_point` | `300.0` | Too low and carbon can never change a verdict, making the sustainability agent decorative. Too high and everything blocks. |
 | `escalation_confidence_floor` | `0.40` | Set near the typical forecast confidence and *every* forecast escalates, which defeats the point of a gate for edge cases. |
 | `approve_confidence_floor` | `0.45` | Gates straight approvals on the forecast underneath actually being solid. |
+| `approve_threshold_usd` | `15_000.0` | Calibrated against the conservative benefits the financial agent actually returns; set it higher and nothing clears a straight approval. |
 
 `carbon_price_usd_per_point` is the main policy lever: raise it to make Cosmic Mart greener,
 lower it to prioritise cash recovery.

@@ -40,8 +40,10 @@ class HumanGate:
                 f"${decision.carbon_penalty_usd:,.0f} carbon penalty. {decision.reasoning}"
             )
         else:
+            # A flag is not always carbon-versus-cash; it can equally be a thin
+            # margin on a shaky forecast. Let the agent's reasoning say which.
             context = (
-                f"Scores in tension - both shown rather than reconciled. "
+                f"Contested - both scores shown rather than reconciled. "
                 f"Financial net ${evaluated.financial.net_benefit_usd:,.0f} "
                 f"(payback {evaluated.financial.payback_days:.0f} days) versus a carbon score "
                 f"of {evaluated.carbon.score:.0f} "
