@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cosmic Mart · Supply Chain Agents</title>
+<style>
+  :root {
+    --bg: #0c0c10; --panel: #14141b; --line: #262633;
+    --text: #e8e8ef; --muted: #8b8ba0;
+    --signal: #2d5a8c; --demand: #1f6b52; --over: #7a2f24;
+    --sustain: #2f5c22; --fin: #3b2a7a; --trade: #7a5c15; --gate: #33333d;
+    --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 24px 28px 16px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  main { padding: 20px 28px 60px; max-width: 1500px; }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 18px 0 24px; }
+  button { background: #2b6cb0; color: #fff; border: 0; border-radius: 6px;
+    padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  input[type=number] { width: 64px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; }
+
+  .layers { display: grid; gap: 14px; margin-bottom: 26px; }
+  .layer { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--panel); }
+  .layer h3 { margin: 0 0 10px; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .nodes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .node { border: 1px solid var(--line); border-radius: 6px; padding: 9px 13px;
+    min-width: 150px; transition: border-color .25s, box-shadow .25s, opacity .25s; opacity: .55; }
+  .node.active { opacity: 1; border-color: currentColor; box-shadow: 0 0 0 1px currentColor inset; }
+  .node .n { font-weight: 600; font-size: 13px; }
+  .node .m { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+  .s-signal { color: #7ab5ec; background: color-mix(in srgb, var(--signal) 28%, transparent); }
+  .s-demand { color: #6fdcb0; background: color-mix(in srgb, var(--demand) 28%, transparent); }
+  .s-over   { color: #f0928a; background: color-mix(in srgb, var(--over) 28%, transparent); }
+  .s-sustain{ color: #a3d977; background: color-mix(in srgb, var(--sustain) 28%, transparent); }
+  .s-fin    { color: #a99cf5; background: color-mix(in srgb, var(--fin) 28%, transparent); }
+  .s-trade  { color: #e8c05a; background: color-mix(in srgb, var(--trade) 28%, transparent); }
+  .s-gate   { color: #b8b8c8; background: color-mix(in srgb, var(--gate) 40%, transparent); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px 16px; }
+  .card .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .card .v { font-size: 24px; font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+  section { margin-bottom: 26px; }
+  section > h2 { font-size: 14px; margin: 0 0 10px; letter-spacing: .04em; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); font-size: 13px; }
+  th { text-align: left; padding: 9px 12px; color: var(--muted); font-weight: 600;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+    border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid #1d1d26; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .approve { background: rgba(74,222,128,.15); color: var(--green); }
+  .flag { background: rgba(251,191,36,.15); color: var(--amber); }
+  .block { background: rgba(248,113,113,.15); color: var(--red); }
+  .muted { color: var(--muted); }
+  #log { background: #08080b; border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; height: 170px; overflow-y: auto;
+    font: 12px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--muted); }
+  #log .ev { color: #7ab5ec; }
+  .empty { padding: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cosmic Mart · Multi-Agent Supply Chain</h1>
+  <div class="sub">Demand forecasting · Overstock detection · Sustainability arbitrage · Financial tradeoff</div>
+</header>
+
+<main>
+  <div class="controls">
+    <button id="go">Run pipeline</button>
+    <label>SKU/market pairs <input type="number" id="limit" value="6" min="1" max="60" /></label>
+    <label><input type="checkbox" id="offline" /> Offline (no API calls)</label>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div class="layers" id="layers"></div>
+
+  <div class="cards" id="cards"></div>
+
+  <section>
+    <h2>Agent activity</h2>
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2>Demand forecasts</h2>
+    <div class="scroll"><table id="demand">
+      <thead><tr><th>SKU @ Market</th><th class="num">Baseline</th><th class="num">Range</th>
+      <th class="num">Confidence</th><th>Conflicting signals</th><th>Reasoning</th></tr></thead>
+      <tbody><tr><td colspan="6" class="empty">Not run yet.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Overstock bleed list</h2>
+    <div class="scroll"><table id="bleed">
+      <thead><tr><th>SKU @ Market</th><th class="num">Excess</th><th class="num">Cover</th>
+      <th class="num">Capital/day</th><th class="num">Storage/day</th><th class="num">Depreciation/day</th>
+      <th class="num">Total/day</th><th>Severity</th></tr></thead>
+      <tbody><tr><td colspan="8" class="empty">Not run yet.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Tradeoff decisions</h2>
+    <div class="scroll"><table id="decisions">
+      <thead><tr><th>ID</th><th>Action</th><th class="num">Net benefit</th><th class="num">Carbon</th>
+      <th class="num">Penalty</th><th class="num">Net score</th><th>Verdict</th><th>Reasoning</th></tr></thead>
+      <tbody><tr><td colspan="8" class="empty">Not run yet.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Human-in-the-loop gate</h2>
+    <div class="scroll"><table id="gate">
+      <thead><tr><th>ID</th><th>Owner</th><th>Verdict</th><th>Summary</th><th>Context</th></tr></thead>
+      <tbody><tr><td colspan="5" class="empty">Not run yet.</td></tr></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script>
+const LAYERS = [
+  { title: "Signal layer", cls: "s-signal", nodes: [
+    ["cultural_intelligence", "Cultural · daily"],
+    ["weather_climate", "Weather · hourly"],
+    ["social_trend_influencer", "Social · real-time"],
+    ["macroeconomic_signal", "Macro · weekly"],
+    ["local_events_news", "Local events · event-driven"],
+    ["seasonality_historical", "Seasonality · weekly"],
+  ]},
+  { title: "Demand synthesis + overstock", cls: "s-demand", nodes: [
+    ["demand", "Demand synthesizer"], ["overstock", "Overstock loss agent", "s-over"],
+  ]},
+  { title: "Parallel evaluation", cls: "s-sustain", nodes: [
+    ["sustainability", "Sustainability agent"], ["financial", "Financial report agent", "s-fin"],
+  ]},
+  { title: "Tradeoff decision", cls: "s-trade", nodes: [["decision", "Tradeoff decision agent"]] },
+  { title: "Human gate", cls: "s-gate", nodes: [["complete", "CFO / CSO final approval"]] },
+];
+
+const nodeEls = {};
+const layersEl = document.getElementById("layers");
+for (const layer of LAYERS) {
+  const wrap = document.createElement("div");
+  wrap.className = "layer";
+  const h = document.createElement("h3");
+  h.textContent = layer.title;
+  wrap.appendChild(h);
+  const nodes = document.createElement("div");
+  nodes.className = "nodes";
+  for (const [key, label, cls] of layer.nodes) {
+    const el = document.createElement("div");
+    el.className = "node " + (cls || layer.cls);
+    el.innerHTML = `<div class="n">${label.split(" · ")[0]}</div>
+      <div class="m">${label.includes(" · ") ? label.split(" · ")[1] : ""}</div>`;
+    nodes.appendChild(el);
+    nodeEls[key] = el;
+  }
+  wrap.appendChild(nodes);
+  layersEl.appendChild(wrap);
+}
+
+const $ = (id) => document.getElementById(id);
+const money = (n) => "$" + Math.round(n).toLocaleString();
+const num = (n) => Math.round(n).toLocaleString();
+const esc = (s) => String(s ?? "").replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
+
+function activate(key) {
+  const el = nodeEls[key];
+  if (!el) return;
+  el.classList.add("active");
+}
+
+function log(event, data) {
+  const el = $("log");
+  const line = document.createElement("div");
+  line.innerHTML = `<span class="ev">${esc(event)}</span> ${esc(JSON.stringify(data))}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function fill(tableId, rows, colspan) {
+  const body = document.querySelector(`#${tableId} tbody`);
+  body.innerHTML = rows.length
+    ? rows.join("")
+    : `<tr><td colspan="${colspan}" class="empty">Nothing to show.</td></tr>`;
+}
+
+function render(payload) {
+  const run = payload.run;
+
+  $("cards").innerHTML = [
+    ["Pairs analysed", run.demand.length],
+    ["Actions evaluated", run.evaluated.length],
+    ["Approved", run.gate_queue.filter(g => g.verdict === "approve").length],
+    ["Flagged", run.gate_queue.filter(g => g.verdict === "flag").length],
+    ["Blocked", run.blocked.length],
+    ["Net benefit", money(payload.weekly_report.total_net_benefit_usd)],
+    ["Carbon credits", num(run.carbon_credits_kg) + " kg"],
+    ["LLM calls", payload.llm_calls],
+  ].map(([k, v]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+
+  fill("demand", run.demand.map(d => `<tr>
+    <td>${esc(d.target.sku.id)}@${esc(d.target.market.code)}</td>
+    <td class="num">${num(d.baseline_units)}</td>
+    <td class="num">${num(d.forecast.units_low)}–${num(d.forecast.units_high)}</td>
+    <td class="num">${Math.round(d.forecast.confidence * 100)}%${d.escalate_to_human ? ' <span class="pill flag">escalate</span>' : ""}</td>
+    <td class="muted">${esc(d.forecast.conflicting_signals.join(", ") || "—")}</td>
+    <td class="muted">${esc(d.forecast.reasoning)}</td></tr>`), 6);
+
+  const bleed = run.overstock
+    .filter(a => a.units_excess > 0)
+    .sort((a, b) => (b.daily_loss.capital_tied_usd + b.daily_loss.storage_fees_usd + b.daily_loss.depreciation_usd)
+                  - (a.daily_loss.capital_tied_usd + a.daily_loss.storage_fees_usd + a.daily_loss.depreciation_usd));
+  fill("bleed", bleed.map(a => {
+    const l = a.daily_loss;
+    const total = l.capital_tied_usd + l.storage_fees_usd + l.depreciation_usd;
+    return `<tr>
+      <td>${esc(a.target.sku.id)}@${esc(a.target.market.code)}</td>
+      <td class="num">${num(a.units_excess)}</td>
+      <td class="num">${a.days_of_cover}d</td>
+      <td class="num">${money(l.capital_tied_usd)}</td>
+      <td class="num">${money(l.storage_fees_usd)}</td>
+      <td class="num">${money(l.depreciation_usd)}</td>
+      <td class="num"><strong>${money(total)}</strong></td>
+      <td>${esc(a.severity)}</td></tr>`;
+  }), 8);
+
+  fill("decisions", run.evaluated.map(e => `<tr>
+    <td>${esc(e.action.id)}</td>
+    <td>${esc(e.action.description)}</td>
+    <td class="num">${money(e.financial.net_benefit_usd)}</td>
+    <td class="num">${Math.round(e.carbon.score)}</td>
+    <td class="num">${money(e.decision.carbon_penalty_usd)}</td>
+    <td class="num">${money(e.decision.net_score)}</td>
+    <td><span class="pill ${esc(e.decision.verdict)}">${esc(e.decision.verdict)}</span></td>
+    <td class="muted">${esc(e.decision.reasoning)}</td></tr>`), 8);
+
+  const gateRows = run.gate_queue.map(g => `<tr>
+    <td>${esc(g.action_id)}</td><td>${esc(g.owner)}</td>
+    <td><span class="pill ${esc(g.verdict)}">${esc(g.verdict)}</span></td>
+    <td>${esc(g.summary)}</td><td class="muted">${esc(g.context)}</td></tr>`);
+  const blockRows = run.blocked.map(b => `<tr>
+    <td>${esc(b.action_id)}</td><td class="muted">—</td>
+    <td><span class="pill block">blocked</span></td>
+    <td>${esc(b.target_key)} · ${esc(b.action)}</td>
+    <td class="muted">${esc(b.reason)}</td></tr>`);
+  fill("gate", gateRows.concat(blockRows), 5);
+
+  $("status").textContent = payload.briefing;
+}
+
+$("go").addEventListener("click", () => {
+  const btn = $("go");
+  btn.disabled = true;
+  $("log").innerHTML = "";
+  Object.values(nodeEls).forEach(el => el.classList.remove("active"));
+  $("status").textContent = "Running…";
+
+  const limit = $("limit").value;
+  const offline = $("offline").checked;
+  const source = new EventSource(`/api/run?limit=${limit}&offline=${offline}`);
+
+  source.onmessage = (msg) => {
+    const { event, data } = JSON.parse(msg.data);
+    if (event === "result") {
+      render(data);
+      source.close();
+      btn.disabled = false;
+      return;
+    }
+    if (event === "error") {
+      $("status").textContent = "Error: " + data.message;
+      source.close();
+      btn.disabled = false;
+      return;
+    }
+    if (event === "signals") {
+      data.readings.forEach(r => activate(r.agent));
+    } else {
+      activate(event);
+    }
+    if (event !== "signals") log(event, data);
+  };
+
+  source.onerror = () => {
+    source.close();
+    btn.disabled = false;
+    if (!$("status").textContent.startsWith("Error")) $("status").textContent = "Stream closed.";
+  };
+});
+</script>
+</body>
+</html>
