@@ -11,3 +11,8 @@ venv/
 runs/
 *_run.json
 *_run*.json
+
+# Claude Code tooling: a re-installable third-party skill (17MB, incl. a
+# platform binary) plus personal permissions. Not project source.
+.claude/
+.impeccable/
