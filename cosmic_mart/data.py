@@ -1,4 +1,4 @@
-"""Cosmic Mart's 10 Earth markets and its SKU catalogue."""
+"""Cosmic Mart's North American markets and its SKU catalogue."""
 
 from __future__ import annotations
 
@@ -6,15 +6,8 @@ from .models import SKU, Market, SKUMarket
 
 MARKETS: list[Market] = [
     Market(code="US", name="United States", region="North America", currency="USD"),
-    Market(code="BR", name="Brazil", region="South America", currency="BRL"),
-    Market(code="GB", name="United Kingdom", region="Europe", currency="GBP"),
-    Market(code="DE", name="Germany", region="Europe", currency="EUR"),
-    Market(code="NG", name="Nigeria", region="Africa", currency="NGN"),
-    Market(code="ZA", name="South Africa", region="Africa", currency="ZAR"),
-    Market(code="IN", name="India", region="Asia", currency="INR"),
-    Market(code="JP", name="Japan", region="Asia", currency="JPY"),
-    Market(code="AE", name="United Arab Emirates", region="Middle East", currency="AED"),
-    Market(code="AU", name="Australia", region="Oceania", currency="AUD"),
+    Market(code="CA", name="Canada",        region="North America", currency="CAD"),
+    Market(code="MX", name="Mexico",        region="North America", currency="MXN"),
 ]
 
 # Gadgets are 77% of revenue and depreciate fastest as new models release.

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 _PREAMBLE = (
     "You are a specialist agent inside Cosmic Mart's supply chain system. "
-    "Cosmic Mart is a multi-planet retailer operating across 10 Earth markets, "
+    "Cosmic Mart operates across three North American markets (US, Canada, Mexico), "
     "carrying a pre-tax loss of $7.84B driven largely by inventory misalignment. "
     "Gadgets are 77% of revenue and depreciate fast. "
     "Report only what your own domain supports. Say so with low confidence when "
@@ -140,12 +140,13 @@ class SocialTrendAgent(SignalAgent):
         )
 
     def generate_trigger(self, raw: dict, target: SKUMarket, estimate: SignalEstimate) -> TriggerSignal:
-        viral = raw.get("viral_event", False)
-        event_type = "viral_trend" if viral else "social_signal"
+        # The mock adapter supplies a specific topic/headline; fall back to a
+        # generic label if the observer wasn't populated.
+        topic = raw.get("topic") or ("viral trend" if raw.get("viral_event") else "social chatter")
         return TriggerSignal(
             agent_id=self.name,
             market=target.market.code,
-            event_type=event_type,
+            event_type=topic,
             estimated_demand_impact=1.0 + estimate.demand_impact_pct / 100.0,
             affected_sku_categories=["gadgets"],
             cadence=Cadence.DAILY,

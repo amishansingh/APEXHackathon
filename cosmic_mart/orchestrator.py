@@ -220,6 +220,42 @@ class Orchestrator:
                     },
                 )
 
+            # --- Derived real-time signals (stock crisis, velocity anomaly) ---
+            # Surface warehouse conditions as first-class signals, not just data rows.
+            stock_status = p2_stock.data.get("status")
+            if stock_status in ("out_of_stock", "critical"):
+                await self._emit(
+                    "p3_signal_derived",
+                    {
+                        "agent_id": "realtime_stock",
+                        "market": target.market.code,
+                        "event_type": "stockout" if stock_status == "out_of_stock" else "stock_crisis",
+                        "estimated_demand_impact": 1.0,
+                        "affected_sku_categories": [target.sku.category],
+                        "confidence_score": 1.0,
+                        "cadence": "real-time",
+                        "sku_id": target.sku.id,
+                        "days_of_supply": p2_stock.data.get("days_of_supply"),
+                    },
+                )
+
+            divergence_ratio = p2_velocity.data.get("divergence_ratio")
+            if divergence_ratio is not None and abs(divergence_ratio - 1.0) > 0.5:
+                await self._emit(
+                    "p3_signal_derived",
+                    {
+                        "agent_id": "sellthrough_velocity",
+                        "market": target.market.code,
+                        "event_type": "velocity_surge" if divergence_ratio > 1.0 else "velocity_drop",
+                        "estimated_demand_impact": divergence_ratio,
+                        "affected_sku_categories": [target.sku.category],
+                        "confidence_score": 0.9,
+                        "cadence": "real-time",
+                        "sku_id": target.sku.id,
+                        "divergence_ratio": divergence_ratio,
+                    },
+                )
+
             # --- Demand synthesis ---
             baseline = await self._baseline_units(target)
             demand = await self.synthesizer.run(target, list(signals), baseline)
