@@ -10,11 +10,11 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, StreamingResponse
 
 from ..config import SETTINGS
-from ..data import MARKETS, SKUS, all_pairs
+from ..data import MARKETS, SKUS, all_skus
 from ..llm import Reasoner
 from ..orchestrator import Orchestrator
 
-app = FastAPI(title="Cosmic Mart Supply Chain")
+app = FastAPI(title="Cosmic Mart Demand Forecasting")
 STATIC = Path(__file__).parent / "static"
 
 
@@ -30,6 +30,13 @@ async def catalogue() -> dict:
         "skus": [s.model_dump() for s in SKUS],
         "model": SETTINGS.model,
         "offline": SETTINGS.offline,
+        "weights": {
+            "hist_branch": SETTINGS.hist_branch_weight,
+            "sig_branch": SETTINGS.sig_branch_weight,
+            "earth_data": SETTINGS.earth_data_weight,
+            "regional_data": SETTINGS.regional_data_weight,
+        },
+        "worker_count": SETTINGS.worker_count,
     }
 
 
@@ -44,18 +51,16 @@ async def run_stream(limit: int = 6, offline: bool = False) -> StreamingResponse
     orchestrator = Orchestrator(
         reasoner=Reasoner(offline=offline or SETTINGS.offline), on_progress=on_progress
     )
-    targets = all_pairs()[:limit]
+    catalogue_slice = all_skus()[:limit]
 
     async def drive() -> None:
         try:
-            result = await orchestrator.run(targets)
+            result = await orchestrator.run(catalogue_slice)
             payload = {
                 "event": "result",
                 "data": {
                     "run": json.loads(result.model_dump_json()),
-                    "briefing": orchestrator.gate.briefing(),
-                    "weekly_report": orchestrator.financial.weekly_report(),
-                    "signal_weights": orchestrator.ledger.snapshot(),
+                    "briefing": orchestrator.gate.briefing(result.human_decisions),
                     "llm_calls": orchestrator.reasoner.call_count,
                 },
             }

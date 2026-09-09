@@ -1,77 +1,62 @@
-"""Human-in-the-loop gate: the final decision layer."""
+"""Human in the Loop — final reviewer for all order recommendations (§6).
+
+Every recommendation passes through human review before execution. The system
+assists but does not execute autonomously. This offline gate simulates a reviewer:
+clean recommendations are approved, escalation-flagged ones are routed to modify /
+escalate, and it surfaces the full synthesizer context including any conflict.
+"""
 
 from __future__ import annotations
 
-from ..models import BlockRecord, EvaluatedAction, GateItem, Verdict
-
-# CFO Rowan Ortega takes financial escalations; CSO Finley Martin takes strategic
-# and sustainability-contested ones.
-OWNERS = {"CFO": "Rowan Ortega", "CSO": "Finley Martin"}
+from ..models import HumanReviewDecision, OrderRecommendation
+from .base import Agent
 
 
-class HumanGate:
-    """Builds decision packages for humans and records what they decide.
+class HumanGate(Agent):
+    name = "human_gate"
 
-    Approved actions carry a recommendation; flagged ones carry both raw scores
-    and full context so the reviewer can see the tension rather than a verdict.
-    """
+    def review(self, recommendations: list[OrderRecommendation]) -> list[HumanReviewDecision]:
+        decisions: list[HumanReviewDecision] = []
+        for rec in recommendations:
+            decisions.append(self._decide(rec))
+        approved = sum(1 for d in decisions if d.action == "approve")
+        escalated = sum(1 for d in decisions if d.action == "escalate")
+        self._log(reviewed=len(decisions), approved=approved, escalated=escalated)
+        return decisions
 
-    def __init__(self) -> None:
-        self.queue: list[GateItem] = []
-        self.blocked: list[BlockRecord] = []
+    def _decide(self, rec: OrderRecommendation) -> HumanReviewDecision:
+        flag_types = {f.flag_type for f in rec.escalation_flags}
 
-    def submit(self, evaluated: EvaluatedAction) -> GateItem | BlockRecord:
-        action = evaluated.action
-        decision = evaluated.decision
-
-        if decision.verdict is Verdict.BLOCK:
-            record = BlockRecord(
-                action_id=action.id,
-                target_key=action.target.key,
-                action=action.action,
-                reason=decision.reasoning,
-            )
-            self.blocked.append(record)
-            return record
-
-        if decision.verdict is Verdict.APPROVE:
-            context = (
-                f"Recommendation. Net ${decision.net_score:,.0f} after a "
-                f"${decision.carbon_penalty_usd:,.0f} carbon penalty. {decision.reasoning}"
-            )
+        if not rec.escalation_flags:
+            action, notes = "approve", "Within thresholds — approved for execution."
+        elif "high_divergence" in flag_types and len(rec.escalation_flags) >= 2:
+            # Conflicting signals with high divergence go up for further review.
+            action, notes = "escalate", "High divergence with additional flags; escalated for review."
+        elif "high_value" in flag_types:
+            action, notes = "escalate", "High-value order requires sign-off."
+        elif "low_confidence" in flag_types:
+            action, notes = "modify", "Low confidence; trim quantity pending firmer signal."
         else:
-            # A flag is not always carbon-versus-cash; it can equally be a thin
-            # margin on a shaky forecast. Let the agent's reasoning say which.
-            context = (
-                f"Contested - both scores shown rather than reconciled. "
-                f"Financial net ${evaluated.financial.net_benefit_usd:,.0f} "
-                f"(payback {evaluated.financial.payback_days:.0f} days) versus a carbon score "
-                f"of {evaluated.carbon.score:.0f} "
-                f"({evaluated.carbon.emissions_kg_co2e:,.0f} kg CO2e). "
-                f"{decision.reasoning}"
-            )
+            action, notes = "modify", "Flagged for reviewer adjustment."
 
-        item = GateItem(
-            action_id=action.id,
-            summary=action.description,
-            verdict=decision.verdict,
-            owner=decision.escalation_owner,
-            net_benefit_usd=evaluated.financial.net_benefit_usd,
-            carbon_score=evaluated.carbon.score,
-            context=context,
+        # A hold with no upside is simply approved as a no-op.
+        if rec.action == "hold" and not rec.escalation_flags:
+            notes = "Hold — no order this cycle."
+
+        return HumanReviewDecision(
+            recommendation_id=rec.id,
+            sku_id=rec.sku.id,
+            action=action,  # type: ignore[arg-type]
+            modifier_notes=notes,
+            reviewer="ops-reviewer",
         )
-        self.queue.append(item)
-        return item
 
-    def for_owner(self, owner: str) -> list[GateItem]:
-        return [i for i in self.queue if i.owner == owner]
-
-    def briefing(self) -> str:
-        approvals = [i for i in self.queue if i.verdict is Verdict.APPROVE]
-        flags = [i for i in self.queue if i.verdict is Verdict.FLAG]
-        value = sum(i.net_benefit_usd for i in approvals)
+    def briefing(self, decisions: list[HumanReviewDecision]) -> str:
+        approved = sum(1 for d in decisions if d.action == "approve")
+        modified = sum(1 for d in decisions if d.action == "modify")
+        escalated = sum(1 for d in decisions if d.action == "escalate")
+        rejected = sum(1 for d in decisions if d.action == "reject")
         return (
-            f"{len(approvals)} recommendation(s) worth ${value:,.0f} net, "
-            f"{len(flags)} contested case(s) needing a call, "
-            f"{len(self.blocked)} rejected and fed back to the overstock agent."
+            f"{approved} approved, {modified} modified, "
+            f"{escalated} escalated, {rejected} rejected across {len(decisions)} recommendation(s)."
         )

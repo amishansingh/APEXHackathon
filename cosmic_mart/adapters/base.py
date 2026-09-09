@@ -1,36 +1,31 @@
-"""Data-source contracts. Swap a mock for a real API by implementing these."""
+"""Data-source contracts. Swap a mock for a real feed by implementing these."""
 
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from ..models import SKUMarket, SignalKind
+from ..models import SKU
 
 
 @runtime_checkable
-class SignalSource(Protocol):
-    """Raw observations for one signal domain, before any agent interprets them."""
+class EarthSalesSource(Protocol):
+    """4 yr North American transactional history, by SKU / sub-market / channel."""
 
-    kind: SignalKind
-
-    async def observe(self, target: SKUMarket) -> dict[str, Any]:
-        """Return the raw payload a signal agent will reason over."""
+    async def observe(self, sku: SKU) -> dict[str, Any]:
         ...
 
 
 @runtime_checkable
-class InventorySource(Protocol):
-    async def stock_level(self, target: SKUMarket) -> dict[str, Any]:
-        """Units on hand, in transit, and the trailing sales rate."""
+class RegionalDataSource(Protocol):
+    """25 yr sales history from the 10 most structurally similar interplanetary regions."""
+
+    async def observe(self, sku: SKU) -> dict[str, Any]:
         ...
 
 
-class SourceRegistry:
-    """Holds one source per signal domain plus the inventory feed."""
+@runtime_checkable
+class SignalsFeedSource(Protocol):
+    """Live signal feeds: new drops + promos, large events, and news."""
 
-    def __init__(self, inventory: InventorySource, signals: dict[SignalKind, SignalSource]):
-        self.inventory = inventory
-        self.signals = signals
-
-    def get(self, kind: SignalKind) -> SignalSource:
-        return self.signals[kind]
+    async def observe(self, sku: SKU) -> dict[str, Any]:
+        ...

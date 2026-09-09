@@ -5,9 +5,10 @@ from __future__ import annotations
 from .models import SKU, Market, SKUMarket
 
 MARKETS: list[Market] = [
-    Market(code="US", name="United States", region="North America", currency="USD"),
-    Market(code="CA", name="Canada",        region="North America", currency="CAD"),
-    Market(code="MX", name="Mexico",        region="North America", currency="MXN"),
+    Market(code="US", name="United States",      region="North America", currency="USD"),
+    Market(code="CA", name="Canada",             region="North America", currency="CAD"),
+    Market(code="MX", name="Mexico",             region="North America", currency="MXN"),
+    Market(code="NA", name="Other North America", region="North America", currency="USD"),
 ]
 
 # Gadgets are 77% of revenue and depreciate fastest as new models release.
@@ -66,20 +67,13 @@ MARKETS_BY_CODE = {m.code: m for m in MARKETS}
 SKUS_BY_ID = {s.id: s for s in SKUS}
 
 
-def all_pairs() -> list[SKUMarket]:
-    """Every SKU/market pair, traversed diagonally.
+def all_skus() -> list[SKU]:
+    """The full North American SKU catalogue — the unit of work in the new pipeline.
 
-    A plain nested loop makes any prefix a single SKU across markets, which
-    starves the transfer logic of variety. Walking the diagonal means a short
-    slice still spans several SKUs and several markets.
+    The historical and signals branches are both SKU-first; sub-market breakdown
+    lives inside each branch's per-item baselines rather than as a separate axis.
     """
-    pairs: list[SKUMarket] = []
-    for offset in range(len(SKUS) + len(MARKETS) - 1):
-        for i, sku in enumerate(SKUS):
-            j = offset - i
-            if 0 <= j < len(MARKETS):
-                pairs.append(SKUMarket(sku=sku, market=MARKETS[j]))
-    return pairs
+    return list(SKUS)
 
 
 def pair(sku_id: str, market_code: str) -> SKUMarket:

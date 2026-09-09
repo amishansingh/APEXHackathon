@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
-
-from .models import SignalKind
 
 load_dotenv()
 
@@ -20,41 +18,30 @@ class Settings:
     seed: int = int(os.getenv("COSMIC_MART_SEED", "42"))
     offline: bool = os.getenv("COSMIC_MART_OFFLINE", "0") == "1"
 
-    # Dollars of financial benefit Cosmic Mart is willing to give up per point of
-    # carbon score. Raising this makes the tradeoff agent greener. Calibrated so a
-    # full 100-point burden outweighs a typical action's benefit several times over;
-    # set it too low and carbon can never change a verdict.
-    carbon_price_usd_per_point: float = 300.0
+    # Branch weights into the demand synthesizer (§7.3). Historical branch is the
+    # anchor; signals nudge it. Configurable per market — new expansions with thin
+    # Earth history may raise the regional analogue weight below.
+    hist_branch_weight: float = 0.7
+    sig_branch_weight: float = 0.3
 
-    # Net score bands that separate approve / flag / block. Calibrated against the
-    # conservative benefit figures the financial agent actually produces; set it
-    # above those and nothing can ever clear a straight approval.
-    approve_threshold_usd: float = 15_000.0
-    block_threshold_usd: float = 0.0
+    # Within the historical branch's merge step: Earth data dominates, regional
+    # analogues fill the gaps when Earth history is sparse.
+    earth_data_weight: float = 0.9
+    regional_data_weight: float = 0.1
 
-    # A forecast this uncertain goes to a human regardless of the numbers. Set it
-    # near the typical confidence and every forecast escalates, which defeats the
-    # gate; it should catch the genuinely shaky tail only.
-    escalation_confidence_floor: float = 0.40
+    # Number of parallel worker agents the Historical Manager shards work across.
+    worker_count: int = int(os.getenv("COSMIC_MART_WORKERS", "3"))
 
-    # A forecast below this cannot carry a straight approval, only a flag.
-    approve_confidence_floor: float = 0.45
+    # Below this Earth baseline, the merge step flags an item as data-sparse so the
+    # regional analogue weight carries more of the forecast.
+    sparse_earth_threshold: float = 50.0
 
-    # Warehousing cost per unit per day, and the discount rate on tied-up capital.
-    storage_cost_per_unit_day: float = 0.06
-    capital_cost_annual_rate: float = 0.09
-
-    # Starting trust in each signal agent. The synthesizer re-weights from here.
-    signal_weights: dict[SignalKind, float] = field(
-        default_factory=lambda: {
-            SignalKind.CULTURAL: 1.0,
-            SignalKind.WEATHER: 0.9,
-            SignalKind.SOCIAL: 0.7,
-            SignalKind.MACRO: 1.1,
-            SignalKind.LOCAL_EVENTS: 0.8,
-            SignalKind.SEASONALITY: 1.3,
-        }
-    )
+    # Escalation triggers for the synthesizer (§5). A recommendation past any of
+    # these goes to a human rather than the autonomous path.
+    escalation_value_threshold_usd: float = 50_000.0
+    escalation_confidence_floor: float = 0.45
+    # Divergence past this many standard deviations flags a conflict for review.
+    divergence_std_threshold: float = 2.0
 
 
 SETTINGS = Settings()

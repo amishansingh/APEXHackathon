@@ -567,7 +567,7 @@
     border-radius: 3px;
     line-height: 1.4;
   }
-  .card-trigger .ct-icon { flex-shrink: 0; margin-top: 1px; opacity: .7; }
+  .card-trigger .ct-icon { flex-shrink: 0; margin-top: 1px; }
   .card-trigger .ct-name {
     font-family: var(--sans);
     font-size: 10.5px;
@@ -578,8 +578,8 @@
     flex-shrink: 0;
     margin-top: 2px;
   }
-  .card-trigger .ct-sep { color: var(--midnight-hair); flex-shrink: 0; margin-top: 2px; }
-  .card-trigger .ct-text { font-family: var(--sans); color: var(--midnight-soft); }
+  .card-trigger .ct-sep { color: var(--midnight-soft); flex-shrink: 0; margin-top: 2px; }
+  .card-trigger .ct-text { font-family: var(--sans); color: var(--midnight); }
 
   /* ============================================================
      GENERIC CARD (suggestion / decision defaults)
@@ -730,8 +730,8 @@
   /* ============================================================
      REJECTED (Blocked) — understated
   ============================================================ */
-  #blocked-section { opacity: .55; }
-  #blocked-section > h2 { font-size: 15px; }
+  #held-section { opacity: .55; }
+  #held-section > h2 { font-size: 15px; }
   .blocked-item {
     background: transparent;
     border: none;
@@ -838,7 +838,7 @@
     <circle cx="590" cy="80"  r="1.2" fill="#d9a659" opacity=".75"/>
     <circle cx="180" cy="20"  r=".6"  fill="#f2ead0" opacity=".5"/>
   </svg>
-  <div class="sector-caption">North American Trade Sector · US · CA · MX</div>
+  <div class="sector-caption">North American Trade Sector · US · CA · MX · NA</div>
 </div>
 
 <main>
@@ -852,22 +852,22 @@
 
   <div id="results-ready" style="display:none"></div>
 
-  <section id="suggest-section" style="display:none">
-    <h2><span class="orn">✦</span>Recommended Maneuvers</h2>
-    <p class="s-sub">Each card is one concrete course-correction — with what it saves and what it costs the environment.</p>
-    <div class="grid" id="suggestions"></div>
+  <section id="orders-section" style="display:none">
+    <h2><span class="orn">✦</span>Recommended Orders</h2>
+    <p class="s-sub">Each card is one order the pipeline recommends — cleared by the reviewer for execution.</p>
+    <div class="grid" id="orders"></div>
   </section>
 
-  <section id="decide-section" style="display:none">
+  <section id="review-section" style="display:none">
     <h2><span class="orn">✦</span>Awaiting Authorization</h2>
-    <p class="s-sub">The numbers hold. A human hand is still needed to weigh the tension and sign these off.</p>
-    <div class="grid" id="decisions"></div>
+    <p class="s-sub">Historical baselines and live signals disagree, or the value is high. A human weighs the widened range before these proceed.</p>
+    <div class="grid" id="reviews"></div>
   </section>
 
-  <section id="blocked-section" style="display:none">
-    <h2><span class="orn">✦</span>Charted &amp; Set Aside</h2>
-    <p class="s-sub">Considered and rejected. Nothing here needs your action.</p>
-    <div class="grid" id="blocked"></div>
+  <section id="held-section" style="display:none">
+    <h2><span class="orn">✦</span>Held &amp; Set Aside</h2>
+    <p class="s-sub">No order this cycle. Nothing here needs your action.</p>
+    <div class="grid" id="held"></div>
   </section>
 </main>
 
@@ -879,6 +879,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const num = (n) => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "—";
 const money = (n) => Number.isFinite(Number(n)) ? "$" + Math.round(Number(n)).toLocaleString() : "—";
+const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+const pct = (c) => Number.isFinite(Number(c)) ? Math.round(Number(c) * 100) + "%" : "—";
 
 const CATEGORY_NAMES = {
   gadgets: "Electronics",
@@ -890,43 +892,52 @@ function categoryName(c) {
   return CATEGORY_NAMES[c] || c;
 }
 
-/* ---- Signal sigils (inline SVG, no emoji) ---- */
+/* ---- Sigils (inline SVG, no emoji) ---- */
 const SIGILS = {
-  crescent:    '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17.5 3a9 9 0 1 0 3.5 12.5A7 7 0 0 1 17.5 3z"/></svg>',
-  sun:         '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/></svg>',
-  arcs:        '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="4" cy="20" r="1.6" fill="currentColor"/><path d="M4 14a6 6 0 0 1 6 6M4 8a12 12 0 0 1 12 12M4 2a18 18 0 0 1 18 18"/></svg>',
-  bars:        '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><rect x="3" y="14" width="4" height="8"/><rect x="10" y="9" width="4" height="13"/><rect x="17" y="4" width="4" height="18"/></svg>',
-  document:    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="1"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>',
-  orbital:     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="3" fill="currentColor"/><ellipse cx="12" cy="12" rx="10" ry="4" stroke-dasharray="2 2" transform="rotate(-20 12 12)"/></svg>',
-  arrow_trail: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="3" cy="12" r="1" fill="currentColor"/><circle cx="8" cy="12" r="1.4" fill="currentColor"/><path d="M14 6l6 6-6 6M14 12h6"/></svg>',
-  compass:     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><path d="M12 3l1.5 8L12 21l-1.5-10z" fill="currentColor" stroke="none"/></svg>',
+  bolt:     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="currentColor" stroke="none"/></svg>',
+  archive:  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
+  layers:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>',
+  broadcast:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M6 6a9 9 0 0 0 0 12M18 6a9 9 0 0 1 0 12"/></svg>',
+  document: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="1"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>',
+  tag:      '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l8-8 9 1 1 9-8 8z"/><circle cx="15" cy="9" r="1.4" fill="currentColor"/></svg>',
+  star:     '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2l2.5 7h7l-5.5 4.5 2 7-6-4.5-6 4.5 2-7-5.5-4.5h7z"/></svg>',
+  scale:    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M12 3v18M6 21h12M5 7l-3 6h6zM19 7l-3 6h6zM5 7h14"/></svg>',
+  compass:  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><path d="M12 3l1.5 8L12 21l-1.5-10z" fill="currentColor" stroke="none"/></svg>',
 };
 
-const MONITORS = {
-  cultural_intelligence:   { sigil: SIGILS.crescent,    name: "Cultural signal" },
-  weather_climate:         { sigil: SIGILS.sun,         name: "Climate signal" },
-  social_trend_influencer: { sigil: SIGILS.arcs,        name: "Social signal" },
-  macroeconomic_signal:    { sigil: SIGILS.bars,        name: "Economic signal" },
-  local_events_news:       { sigil: SIGILS.document,    name: "Local news" },
-  realtime_stock:          { sigil: SIGILS.orbital,     name: "Stock signal" },
-  sellthrough_velocity:    { sigil: SIGILS.arrow_trail, name: "Velocity signal" },
+/* ---- Signal-type presentation ---- */
+const SIGNAL_TYPES = {
+  promo:       { sigil: SIGILS.tag,       name: "New drops + promos" },
+  large_event: { sigil: SIGILS.star,      name: "Large event" },
+  news:        { sigil: SIGILS.document,  name: "News agent" },
 };
-function monitor(id) {
-  return MONITORS[id] || { sigil: SIGILS.compass, name: String(id || "Signal").replace(/_/g, " ") };
+function signalType(t) {
+  return SIGNAL_TYPES[t] || { sigil: SIGILS.compass, name: String(t || "signal").replace(/_/g, " ") };
 }
 
-const STOCK_STATUS = {
-  healthy:      { label: "Well stocked", cls: "p-green" },
-  low:          { label: "Running low",  cls: "p-amber" },
-  critical:     { label: "Nearly out",   cls: "p-red" },
-  out_of_stock: { label: "Out of stock", cls: "p-red" },
+const DIRECTION = {
+  up:      { label: "raises demand",  cls: "c-green" },
+  down:    { label: "lowers demand",  cls: "c-red" },
+  neutral: { label: "no clear pull",  cls: "muted" },
 };
-function stockStatus(s) {
-  return STOCK_STATUS[s] || { label: "Unknown", cls: "p-grey" };
-}
+function directionInfo(d) { return DIRECTION[d] || DIRECTION.neutral; }
 
-const TRENDS = { rising: "Rising", stable: "Steady", declining: "Declining" };
-function trendLabel(t) { return TRENDS[t] || ""; }
+/* ---- Human review decisions ---- */
+const DECISIONS = {
+  approve:  { label: "Cleared",   cls: "p-green" },
+  modify:   { label: "Adjust",    cls: "p-amber" },
+  escalate: { label: "Escalate",  cls: "p-amber" },
+  reject:   { label: "Set aside", cls: "p-red" },
+};
+function decisionInfo(a) { return DECISIONS[a] || { label: "—", cls: "p-grey" }; }
+
+/* ---- Escalation flags ---- */
+const FLAG_LABELS = {
+  high_value:      "High-value order",
+  low_confidence:  "Low confidence",
+  high_divergence: "Signals diverge from history",
+};
+function flagLabel(f) { return FLAG_LABELS[f] || String(f || "").replace(/_/g, " "); }
 
 function confidenceLabel(c) {
   const v = Number(c);
@@ -936,213 +947,51 @@ function confidenceLabel(c) {
   return "Low confidence";
 }
 
-function envCost(score) {
-  const v = Number(score);
-  if (!Number.isFinite(v)) return { label: "Unknown", cls: "c-amber" };
-  if (v < 30) return { label: "Light", cls: "c-green" };
-  if (v < 60) return { label: "Moderate", cls: "c-amber" };
-  return { label: "Heavy", cls: "c-red" };
-}
-
-const VERDICTS = {
-  approve: { label: "Go ahead",      cls: "p-green" },
-  flag:    { label: "Your call",     cls: "p-amber" },
-  block:   { label: "Don't do this", cls: "p-red" },
-};
-function verdictInfo(v) { return VERDICTS[v] || { label: "—", cls: "p-grey" }; }
-
-const ACTION_VERBS = {
-  transfer: "Move stock",
-  discount: "Run a sale",
-  hold: "Leave it alone",
-  reorder: "Order more",
-  supplier_switch: "Change supplier",
-};
-function actionLabel(a) { return ACTION_VERBS[a] || String(a || "").replace(/_/g, " "); }
-
-const REVIEWERS = {
-  CFO: "Rowan Ortega (Finance)",
-  CSO: "Finley Martin (Sustainability)",
-};
-function reviewerName(r) {
-  if (!r || r === "none") return "";
-  return REVIEWERS[r] || r;
-}
-
 /* ---- Catalogue lookups ---- */
 const skuById = {};
 const marketByCode = {};
 function skuName(id) { const s = skuById[id]; return (s && s.name) || id || "—"; }
 function skuCategory(id) { const s = skuById[id]; return s ? categoryName(s.category) : ""; }
 function marketName(code) { const m = marketByCode[code]; return (m && m.name) || code || "—"; }
-function withThe(name) {
-  return /^(United|Netherlands|Philippines|Czech|Bahamas|Maldives)\b/.test(String(name)) ? "the " + name : name;
-}
-function countryPhrase(code) { return withThe(marketName(code)); }
-function cap(s) { return String(s).charAt(0).toUpperCase() + String(s).slice(1); }
 
-function impactPhrase(multiplier) {
-  const m = Number(multiplier);
-  if (!Number.isFinite(m)) return "no meaningful shift expected";
-  const pct = Math.round(Math.abs(m - 1) * 100);
-  if (pct < 1) return "no meaningful shift expected";
-  if (m > 1) return "demand is expected to rise about " + pct + "%";
-  return "demand is expected to fall about " + pct + "%";
-}
-
-function prettyEventName(eventType) {
-  return String(eventType || "").replace(/_/g, " ").trim();
-}
-
-const WEATHER_WORDS = ["weather", "storm", "heat", "cold", "rain", "snow", "winter",
-  "summer", "autumn", "monsoon", "typhoon", "cyclone", "humid", "dry", "mild",
-  "warm", "frost", "bushfire", "sand"];
-
-function eventSentence(eventType, marketCode, multiplier, agentId, extras) {
-  const country = countryPhrase(marketCode);
-  const raw = String(eventType || "").toLowerCase();
-  const impact = impactPhrase(multiplier);
-  extras = extras || {};
-
-  // Derived signal — stock crisis
-  if (agentId === "realtime_stock") {
-    const sku = extras.sku_id ? skuName(extras.sku_id) : "an item";
-    const days = extras.days_of_supply;
-    const daysNote = (days != null && Number.isFinite(days)) ? " — only " + Math.round(days) + " days of cover remain" : "";
-    if (raw === "stockout") {
-      return sku + " has run out of stock in " + country + daysNote;
-    }
-    return sku + " is nearly out of stock in " + country + daysNote;
-  }
-  // Derived signal — velocity anomaly
-  if (agentId === "sellthrough_velocity") {
-    const sku = extras.sku_id ? skuName(extras.sku_id) : "an item";
-    const dr = Number(extras.divergence_ratio);
-    const pct = Number.isFinite(dr) ? Math.round(Math.abs(dr - 1) * 100) : null;
-    if (raw === "velocity_surge") {
-      return sku + " is selling" + (pct ? " " + pct + "% faster" : " faster") + " than expected in " + country;
-    }
-    return sku + " is selling" + (pct ? " " + pct + "% slower" : " slower") + " than expected in " + country;
-  }
-
-  let lead;
-  if (!raw || raw === "no_event") return null;
-  if (raw.includes("election")) {
-    lead = "A general election is coming up in " + country;
-  } else if (raw.includes("recall")) {
-    lead = "A product recall is in the news in " + country;
-  } else if (raw.includes("viral") || raw.includes("social") || raw.includes("influencer")) {
-    lead = "Social media buzz picked up in " + country;
-  } else if (raw.includes("macro") || raw.includes("inflation") || raw.includes("currency") || raw.includes("econom")) {
-    lead = "Economic conditions shifted in " + country;
-  } else if (agentId === "weather_climate" || WEATHER_WORDS.some(w => raw.includes(w))) {
-    const desc = prettyEventName(eventType);
-    lead = desc
-      ? "The weather in " + country + " is turning to " + desc
-      : "Unusual weather is affecting " + country;
-  } else {
-    lead = prettyEventName(eventType) + " is coming up in " + country;
-    lead = lead.charAt(0).toUpperCase() + lead.slice(1);
-  }
-  return lead + " — " + impact;
-}
-
-function actionSentence(action) {
-  if (!action) return "";
-  const product = (action.target && action.target.sku && action.target.sku.name)
-    || skuName(action.target && action.target.sku && action.target.sku.id);
-  const origin = withThe((action.target && action.target.market && action.target.market.name)
-    || marketName(action.target && action.target.market && action.target.market.code));
-  const units = num(action.units);
-  switch (action.action) {
-    case "transfer":
-      return "Move " + units + " " + product + " from " + origin
-        + " to " + countryPhrase(action.destination_market);
-    case "discount":
-      return "Run a " + Math.round(action.discount_pct || 0) + "% sale on "
-        + product + " in " + origin;
-    case "reorder":
-      return "Order " + units + " more " + product + " for " + origin;
-    case "supplier_switch":
-      return "Change supplier for " + product + " in " + origin;
-    case "hold":
-      return "Leave " + product + " in " + origin + " alone for now";
-    default:
-      return actionLabel(action.action) + " — " + product + " in " + origin;
+/* ---- Order headline + rationale ---- */
+function orderHeadline(rec) {
+  const product = (rec.sku && rec.sku.name) || "—";
+  const qty = num(rec.quantity);
+  switch (rec.action) {
+    case "reorder":   return "Order " + qty + " more " + product;
+    case "rebalance": return "Rebalance " + qty + " " + product + " across warehouses";
+    case "hold":      return "Hold " + product + " — no order this cycle";
+    default:          return cap(String(rec.action || "")) + " " + product;
   }
 }
 
-function actionReason(action) {
-  if (!action) return "";
-  const origin = withThe((action.target && action.target.market && action.target.market.name)
-    || marketName(action.target && action.target.market && action.target.market.code));
-  if (action.action === "transfer") {
-    return cap(origin) + " has more of these than it can sell, and "
-      + countryPhrase(action.destination_market) + " is selling through fast.";
+function orderReason(rec) {
+  const fr = rec.forecast_range || {};
+  if (rec.action === "reorder") {
+    return "The blended forecast (expected " + num(fr.units_expected) + " units) runs ahead of the historical baseline — stock needs topping up.";
   }
-  if (action.action === "discount") {
-    return cap(origin) + " has far more of these than it will sell at full price.";
+  if (rec.action === "rebalance") {
+    return "Signals point below the historical baseline; excess stock should be moved rather than reordered.";
   }
-  if (action.action === "reorder") {
-    return cap(origin) + " is running down its stock faster than new deliveries arrive.";
-  }
-  return "This is the best balance of cost and benefit we found for " + origin + ".";
+  return "Historical and live signals broadly agree near the baseline — no order needed this cycle.";
 }
 
-function moneyPhrase(net) {
-  const v = Number(net);
-  if (!Number.isFinite(v)) return "No clear money impact";
-  if (v >= 0) return "Saves about " + money(v);
-  return "Costs about " + money(Math.abs(v));
-}
-
-function velocityPhrase(divergence) {
-  const d = Number(divergence);
-  if (!Number.isFinite(d)) return "";
-  if (d > 1.15) return "selling " + Math.round((d - 1) * 100) + "% faster than expected";
-  if (d < 0.85) return "selling " + Math.round((1 - d) * 100) + "% slower than expected";
-  return "selling as expected";
-}
-
-function blockedReason(reason) {
-  const raw = String(reason || "").toLowerCase();
-  if (raw.includes("carbon") || raw.includes("emission")) {
-    return "The environmental cost of this move outweighs what it would save.";
-  }
-  if (raw.includes("benefit") || raw.includes("cost") || raw.includes("negative") || raw.includes("net")) {
-    return "Moving this stock would cost more than leaving it where it is.";
-  }
-  if (raw.includes("confidence")) {
-    return "We are not confident enough in the forecast behind this to recommend it.";
-  }
-  return "On balance this would leave you worse off than doing nothing.";
-}
-
-function tensionSentence(item) {
-  const carbon = Number(item && item.carbon_score);
-  const benefit = Number(item && item.net_benefit_usd);
-  if (item && item.owner === "CSO") {
-    return "The money works out, but the environmental cost is high — someone needs to weigh those against each other.";
-  }
-  if (Number.isFinite(carbon) && carbon >= 55) {
-    return "The money works out, but the environmental cost is high — someone needs to weigh those against each other.";
-  }
-  if (Number.isFinite(benefit) && benefit <= 0) {
-    return "This does not clearly pay for itself, so it needs a judgement call.";
-  }
-  return "The forecast behind this isn't solid enough to act on automatically.";
+function rangePhrase(fr) {
+  if (!fr) return "—";
+  return num(fr.units_low) + " – " + num(fr.units_expected) + " – " + num(fr.units_high) + " units";
 }
 
 /* ============================================================
    2. PROGRESS STEPS — Roman numerals, no emoji
    ============================================================ */
 const STEPS = [
-  { n: "I",   title: "5 monitors scanning the world",        agents: ["Holiday calendar", "Weather watch", "Social media", "Economy tracker", "Local news"] },
-  { n: "II",  title: "Item Scope Agent locks in products",   agents: ["Item Scope Agent"] },
-  { n: "III", title: "3 history agents read past data",      agents: ["Year-over-Year Sales", "Seasonal Peaks", "Supplier Lead Times"] },
-  { n: "IV",  title: "3 stock agents check the warehouse",   agents: ["Real-time Stock", "Inbound Shipments", "Sell-through Velocity"] },
-  { n: "V",   title: "Demand Synthesizer builds forecast",   agents: ["Demand Synthesizer"] },
-  { n: "VI",  title: "Tradeoff Agent weighs money vs planet",agents: ["Financial Agent", "Sustainability Agent", "Tradeoff Agent"] },
+  { n: "I",   title: "Daily trigger fires both branches",     agents: ["Trigger"] },
+  { n: "II",  title: "Historical branch shards & merges",     agents: ["Historical Manager", "Workers ×n", "Merge & Weight"] },
+  { n: "III", title: "Signals branch pulls last 24h",         agents: ["Signal Processing", "Signal Report"] },
+  { n: "IV",  title: "Demand Synthesizer blends 0.7 / 0.3",   agents: ["Demand Synthesizer"] },
+  { n: "V",   title: "Order recommendations packaged",        agents: ["Order Recommendation"] },
+  { n: "VI",  title: "Human in the loop reviews each order",  agents: ["Human Review"] },
 ];
 
 function buildSteps() {
@@ -1188,16 +1037,15 @@ function resetSteps() {
 }
 
 const STEP_MAP = {
-  signals:         { active: [0] },
-  p3_trigger:      { active: [0] },
-  p3_signal_derived:{ /* keeps prior phase state */ },
-  item_synthesized:{ done: [0], active: [1] },
-  p1_result:       { done: [1], active: [2] },
-  p2_result:       { active: [3] },
-  demand:          { done: [2, 3], active: [4] },
-  decision:        { done: [4], active: [5] },
-  proposals:       { done: [4], active: [5] },
-  complete:        { done: [0, 1, 2, 3, 4, 5] },
+  trigger:           { active: [0] },
+  hist_shards:       { done: [0], active: [1] },
+  hist_workers_done: { active: [1] },
+  hist_merged:       { done: [1] },
+  sig_processed:     { done: [0], active: [2] },
+  sig_report:        { done: [2] },
+  synthesizing:      { done: [1, 2], active: [3] },
+  recommendations:   { done: [3], active: [4] },
+  complete:          { done: [0, 1, 2, 3, 4, 5] },
 };
 
 function advanceSteps(event) {
@@ -1210,16 +1058,20 @@ function advanceSteps(event) {
 /* ============================================================
    3. LIVE STATE
    ============================================================ */
-let runCounts = { world: 0, analyzed: 0, seenAnalyzed: {} };
 let currentSource = null;
 let runComplete = false;
+let milestones = new Set();
+let histMeta = {};
+let sigMeta = {};
 let stepData = [[], [], [], [], [], []];
 let activeDrawerStep = -1;
 let reasoningOpen = new Set();
 let lastRun = null;
 
 function resetState() {
-  runCounts = { world: 0, analyzed: 0, seenAnalyzed: {} };
+  milestones = new Set();
+  histMeta = {};
+  sigMeta = {};
   stepData = [[], [], [], [], [], []];
   activeDrawerStep = -1;
   reasoningOpen = new Set();
@@ -1232,134 +1084,114 @@ function resetState() {
    4. RENDERERS
    ============================================================ */
 
-function sourceTrigger(e, run) {
-  if (!e || !run) return null;
-  const skuId = e.action && e.action.target && e.action.target.sku && e.action.target.sku.id;
-  const market = e.action && e.action.target && e.action.target.market && e.action.target.market.code;
-  if (!skuId || !market) return null;
-  const iso = run.item_synthesizer_outputs || [];
-  const match = iso.find(o =>
-    (o.affected_skus || []).some(s => s.sku_id === skuId && s.market === market)
-  );
-  return match ? match.source_trigger : null;
-}
-
-function cardTriggerHtml(e, run) {
-  const trig = sourceTrigger(e, run);
-  if (!trig) return "";
-  const m = monitor(trig.agent_id);
-  const sentence = eventSentence(trig.event_type, trig.market, trig.estimated_demand_impact, trig.agent_id, {});
-  if (!sentence) return "";
+function conflictHtml(rec) {
+  if (!rec.conflict_summary) return "";
   return "<div class='card-trigger'>"
-    + "<span class='ct-icon'>" + m.sigil + "</span>"
-    + "<span class='ct-name'>" + esc(m.name) + "</span>"
+    + "<span class='ct-icon'>" + SIGILS.scale + "</span>"
+    + "<span class='ct-name'>Conflict</span>"
     + "<span class='ct-sep'>&nbsp;&middot;&nbsp;</span>"
-    + "<span class='ct-text'>" + esc(sentence) + "</span>"
+    + "<span class='ct-text'>" + esc(rec.conflict_summary) + "</span>"
     + "</div>";
 }
 
-function renderSuggestions(run) {
-  const items = (run.evaluated || []).filter(e =>
-    e.decision && (e.decision.verdict === "approve" || e.decision.verdict === "flag"));
-  const cards = items.map(e => {
-    const v = verdictInfo(e.decision.verdict);
-    const env = envCost(e.carbon && e.carbon.score);
-    const owner = reviewerName(e.decision.escalation_owner);
-    const base = '<div class="box sugg v-' + esc(e.decision.verdict) + '">'
-      + '<span class="pill ' + v.cls + '">' + esc(v.label) + '</span>'
-      + '<h4>' + esc(actionSentence(e.action)) + '</h4>'
-      + cardTriggerHtml(e, run)
-      + '<div class="b-row"><span class="b-label">Why</span> ' + esc(actionReason(e.action)) + '</div>'
-      + '<div class="b-row"><span class="b-label">Money</span> <b>'
-        + esc(moneyPhrase(e.financial && e.financial.net_benefit_usd)) + '</b></div>'
-      + '<div class="b-row"><span class="b-label">Environment</span> <b class="' + env.cls + '">'
-        + esc(env.label) + '</b></div>'
-      + (e.decision.verdict === "flag" && owner
-          ? '<div class="b-meta">Needs a decision from ' + esc(owner) + '</div>' : "");
-    return cardWithReasoning(base, e.action.id, e, run) + '</div>';
-  });
-  $("suggestions").innerHTML = cards.join("");
-  $("suggest-section").style.display = cards.length ? "" : "none";
+function flagsHtml(rec) {
+  const flags = rec.escalation_flags || [];
+  if (!flags.length) return "";
+  return flags.map(f =>
+    "<div class='b-row'><span class='b-label'>Flag</span> " + esc(flagLabel(f.flag_type))
+    + " — " + esc(f.reason) + "</div>"
+  ).join("");
 }
 
-function renderDecisions(run) {
-  const flagged = (run.gate_queue || []).filter(g => g.verdict === "flag");
-  const actionById = {};
-  const evalById = {};
-  (run.evaluated || []).forEach(e => { actionById[e.action.id] = e.action; evalById[e.action.id] = e; });
+/* Pair each recommendation with its human decision, then bucket for display. */
+function classifyRun(run) {
+  const recById = {};
+  (run.order_recommendations || []).forEach(r => { recById[r.id] = r; });
+  const groups = { orders: [], review: [], held: [] };
+  (run.human_decisions || []).forEach(d => {
+    const rec = recById[d.recommendation_id];
+    if (!rec) return;
+    const pair = { rec, dec: d };
+    // The reviewer's decision drives the bucket. A flagged hold (a preserved
+    // conflict with a widened range) still belongs in review, not the quiet pile.
+    if (d.action === "modify" || d.action === "escalate") groups.review.push(pair);
+    else if (d.action === "reject" || rec.action === "hold") groups.held.push(pair);
+    else groups.orders.push(pair); // approved, actionable
+  });
+  return groups;
+}
 
-  const cards = flagged.map(g => {
-    const act = actionById[g.action_id];
-    const ev = evalById[g.action_id];
-    const headline = act ? actionSentence(act) : g.summary;
-    const owner = reviewerName(g.owner) || "someone on the leadership team";
+function renderOrders(run) {
+  const { orders } = classifyRun(run);
+  const cards = orders.map(({ rec, dec }) => {
+    const info = decisionInfo(dec.action);
+    const fr = rec.forecast_range || {};
+    const base = '<div class="box sugg">'
+      + '<span class="pill ' + info.cls + '">' + esc(info.label) + '</span>'
+      + '<h4>' + esc(orderHeadline(rec)) + '</h4>'
+      + conflictHtml(rec)
+      + '<div class="b-row"><span class="b-label">Why</span> ' + esc(orderReason(rec)) + '</div>'
+      + '<div class="b-row"><span class="b-label">Forecast</span> <b>' + esc(rangePhrase(fr))
+        + (fr.widened ? ' · <span class="c-amber">widened</span>' : '') + '</b></div>'
+      + '<div class="b-row"><span class="b-label">Confidence</span> <b>' + esc(confidenceLabel(rec.confidence))
+        + ' (' + esc(pct(rec.confidence)) + ')</b></div>'
+      + (rec.supplier ? '<div class="b-meta">Supplier ' + esc(rec.supplier)
+          + (rec.warehouse ? ' · Route ' + esc(rec.warehouse) : '') + '</div>' : '');
+    return cardWithReasoning(base, rec.id, rec, run) + '</div>';
+  });
+  $("orders").innerHTML = cards.join("");
+  $("orders-section").style.display = cards.length ? "" : "none";
+}
+
+function renderReviews(run) {
+  const { review } = classifyRun(run);
+  const cards = review.map(({ rec, dec }) => {
+    const info = decisionInfo(dec.action);
+    const fr = rec.forecast_range || {};
     const base = '<div class="box decide">'
-      + '<span class="pill p-amber">Your call</span>'
-      + '<h4>' + esc(headline) + '</h4>'
-      + cardTriggerHtml(ev, run)
-      + '<div class="b-row"><span class="b-label">Who decides</span> <b>' + esc(owner) + '</b></div>'
-      + '<div class="b-row">' + esc(tensionSentence(g)) + '</div>'
-      + '<div class="b-meta">' + esc(moneyPhrase(g.net_benefit_usd)) + ' · Environmental cost: '
-        + esc(envCost(g.carbon_score).label) + '</div>';
-    return cardWithReasoning(base, g.action_id, ev, run) + '</div>';
+      + '<span class="pill ' + info.cls + '">' + esc(info.label) + '</span>'
+      + '<h4>' + esc(orderHeadline(rec)) + '</h4>'
+      + conflictHtml(rec)
+      + '<div class="b-row"><span class="b-label">Forecast</span> <b>' + esc(rangePhrase(fr))
+        + (fr.widened ? ' · <span class="c-amber">widened</span>' : '') + '</b></div>'
+      + flagsHtml(rec)
+      + '<div class="b-meta">' + esc(cap(dec.action)) + ' — ' + esc(dec.modifier_notes || '') + '</div>';
+    return cardWithReasoning(base, rec.id, rec, run) + '</div>';
   });
-  $("decisions").innerHTML = cards.join("");
-  $("decide-section").style.display = cards.length ? "" : "none";
+  $("reviews").innerHTML = cards.join("");
+  $("review-section").style.display = cards.length ? "" : "none";
 }
 
-function renderBlocked(run) {
-  const actionById = {};
-  const evalById = {};
-  (run.evaluated || []).forEach(e => { actionById[e.action.id] = e.action; evalById[e.action.id] = e; });
-  const cards = (run.blocked || []).map(b => {
-    const act = actionById[b.action_id];
-    const ev = evalById[b.action_id];
-    const headline = act ? actionSentence(act)
-      : actionLabel(b.action) + " — " + skuName(String(b.target_key || "").split("@")[0])
-        + " in " + marketName(String(b.target_key || "").split("@")[1]);
+function renderHeld(run) {
+  const { held } = classifyRun(run);
+  const cards = held.map(({ rec, dec }) => {
     const base = '<div class="blocked-item">'
-      + '<div class="bi-title">' + esc(headline) + '</div>'
-      + cardTriggerHtml(ev, run)
-      + esc(blockedReason(b.reason));
-    return cardWithReasoning(base, b.action_id, ev, run) + '</div>';
+      + '<div class="bi-title">' + esc(orderHeadline(rec)) + '</div>'
+      + esc(dec.modifier_notes || orderReason(rec));
+    return cardWithReasoning(base, rec.id, rec, run) + '</div>';
   });
-  $("blocked").innerHTML = cards.join("");
-  $("blocked-section").style.display = cards.length ? "" : "none";
+  $("held").innerHTML = cards.join("");
+  $("held-section").style.display = cards.length ? "" : "none";
 }
 
 function renderFinal(payload) {
   const run = payload.run || {};
   lastRun = run;
 
-  // Rebuild stepData from authoritative result so drawer shows complete data
-  stepData[0] = (run.p3_triggers || []);
-  stepData[1] = (run.item_synthesizer_outputs || []).map(o => ({
-    source_trigger_agent: o.source_trigger.agent_id,
-    affected_skus: (o.affected_skus || []),
-    affected_sku_count: (o.affected_skus || []).length,
-    market: o.source_trigger.market,
-  }));
-  stepData[2] = (run.p1_outputs || []);
-  stepData[3] = (run.p2_outputs || []);
-  stepData[4] = (run.demand || []).map(d => ({
-    target: d.target.sku.id + "@" + d.target.market.code,
-    low: d.forecast.units_low,
-    expected: d.forecast.units_expected,
-    high: d.forecast.units_high,
-    confidence: d.forecast.confidence,
-    escalate: d.escalate_to_human,
-  }));
-  stepData[5] = (run.evaluated || []).map(e => ({
-    verdict: e.decision.verdict,
-    net_benefit_usd: e.financial && e.financial.net_benefit_usd,
-    carbon_score: e.carbon && e.carbon.score,
-    net_score: e.decision.net_score,
-    sku_name: e.action && e.action.target && e.action.target.sku && e.action.target.sku.name,
-    market_name: e.action && e.action.target && e.action.target.market && e.action.target.market.name,
-    action_type: e.action && e.action.action,
-  }));
+  // Rebuild stepData from authoritative result so drawers show complete data.
+  const t = run.trigger || {};
+  stepData[0] = [{
+    run_id: run.run_id,
+    reason: t.reason,
+    sku_count: (t.sku_catalogue || []).length,
+    triggered_at: t.triggered_at,
+  }];
+  stepData[1] = run.merged_baselines || [];
+  stepData[2] = run.signal_contexts || [];
+  stepData[3] = run.order_recommendations || [];
+  stepData[4] = run.order_recommendations || [];
+  stepData[5] = (run.human_decisions || []);
 
-  // Refresh open drawer with authoritative data
   if (activeDrawerStep >= 0) {
     const drawer = $("step-drawer");
     if (drawer && drawer.classList.contains("open")) {
@@ -1370,96 +1202,30 @@ function renderFinal(payload) {
   }
 
   updateProgressBar(true);
-  renderSuggestions(run);
-  renderDecisions(run);
-  renderBlocked(run);
+  renderOrders(run);
+  renderReviews(run);
+  renderHeld(run);
   announceResults(run);
 }
 
 function scrollToResults() {
-  const s = $("suggest-section"), d = $("decide-section"), b = $("blocked-section");
-  const target = (s && s.style.display !== "none") ? s
-               : (d && d.style.display !== "none") ? d
-               : (b && b.style.display !== "none") ? b : null;
+  const o = $("orders-section"), r = $("review-section"), h = $("held-section");
+  const target = (o && o.style.display !== "none") ? o
+               : (r && r.style.display !== "none") ? r
+               : (h && h.style.display !== "none") ? h : null;
   if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function announceResults(run) {
-  const n = (run.evaluated || []).filter(e =>
-    e.decision && (e.decision.verdict === "approve" || e.decision.verdict === "flag")
-  ).length;
+  const { orders, review } = classifyRun(run);
+  const n = orders.length + review.length;
   const el = $("results-ready");
   if (!el) return;
   el.innerHTML = '<span class="rr-label">Run complete</span>'
-    + '<span class="rr-count">' + n + ' maneuver' + (n === 1 ? '' : 's') + ' ready</span>'
-    + '<button class="rr-btn" onclick="scrollToResults()">View maneuvers</button>';
+    + '<span class="rr-count">' + n + ' order' + (n === 1 ? '' : 's') + ' for review</span>'
+    + '<button class="rr-btn" onclick="scrollToResults()">View orders</button>';
   el.style.display = "flex";
   setTimeout(scrollToResults, 350);
-}
-
-function renderFilterGap(stepIdx) {
-  const run = lastRun;
-  if (!run) return "";
-
-  if (stepIdx === 1) {
-    const scoped = new Set();
-    (run.item_synthesizer_outputs || []).forEach(iso =>
-      (iso.affected_skus || []).forEach(s => scoped.add(s.sku_id + "@" + s.market))
-    );
-    const inP1 = new Set((run.p1_outputs || []).map(p => p.sku_id + "@" + p.market));
-    const missing = [...scoped].filter(k => !inP1.has(k));
-    if (!missing.length) return "";
-    const rows = missing.map(k => {
-      const [sku, mkt] = k.split("@");
-      return "<tr>"
-        + "<td><div class='d-main'>" + esc(skuName(sku)) + "</div>"
-        + "<div class='d-sub'>" + esc(marketName(mkt)) + "</div></td>"
-        + "<td colspan='2' class='muted'>No historical data evaluated — not selected for pipeline</td>"
-        + "</tr>";
-    });
-    return gapSection("Not carried forward to historical analysis", rows);
-  }
-
-  if (stepIdx === 4) {
-    const inEval = new Set(
-      (run.evaluated || []).map(e =>
-        e.action && e.action.target &&
-        e.action.target.sku.id + "@" + e.action.target.market.code
-      ).filter(Boolean)
-    );
-    const overstockByKey = {};
-    (run.overstock || []).forEach(o => {
-      if (o.target) overstockByKey[o.target.sku.id + "@" + o.target.market.code] = o;
-    });
-    const missing = (run.demand || [])
-      .map(d => ({ key: d.target.sku.id + "@" + d.target.market.code, d }))
-      .filter(({ key }) => !inEval.has(key));
-    if (!missing.length) return "";
-    const rows = missing.map(({ key, d }) => {
-      const o = overstockByKey[key];
-      let reason = "No action proposed";
-      if (o) {
-        if (o.units_excess <= 0) reason = "No excess stock detected";
-        else if (o.severity === "none") reason = "Overstock below action threshold";
-        else reason = "Severity: " + o.severity + " · " + o.units_excess + " excess units";
-      }
-      return "<tr>"
-        + "<td><div class='d-main'>" + esc(d.target.sku.name) + "</div>"
-        + "<div class='d-sub'>" + esc(d.target.market.name) + "</div></td>"
-        + "<td colspan='4' class='muted'>" + esc(reason) + "</td>"
-        + "</tr>";
-    });
-    return gapSection("Not proposed to Tradeoff Agent", rows);
-  }
-
-  return "";
-}
-
-function gapSection(label, rows) {
-  return "<div class='drawer-gap'>"
-    + "<div class='gap-label'>" + esc(label) + "</div>"
-    + "<table class='drawer-table'><tbody>" + rows.join("") + "</tbody></table>"
-    + "</div>";
 }
 
 /* ============================================================
@@ -1467,6 +1233,10 @@ function gapSection(label, rows) {
    ============================================================ */
 
 /* -- Progress bar ------------------------------------------ */
+const MILESTONE_PCT = {
+  trigger: 6, hist_shards: 18, sig_processed: 30, hist_workers_done: 44,
+  sig_report: 56, hist_merged: 68, synthesizing: 80, recommendations: 92,
+};
 function updateProgressBar(complete) {
   const row = $("progress-bar-row");
   const fill = $("progress-fill");
@@ -1474,30 +1244,18 @@ function updateProgressBar(complete) {
   if (!row) return;
   row.classList.add("visible");
   const parts = [];
-  if (runCounts.world) parts.push("<strong>" + runCounts.world + "</strong> signal" + (runCounts.world === 1 ? "" : "s") + " received");
-  if (runCounts.analyzed) parts.push("<strong>" + runCounts.analyzed + "</strong> item" + (runCounts.analyzed === 1 ? "" : "s") + " analyzed");
+  if (histMeta.items != null) parts.push("<strong>" + histMeta.items + "</strong> item" + (histMeta.items === 1 ? "" : "s") + " through history");
+  if (sigMeta.signals != null) parts.push("<strong>" + sigMeta.signals + "</strong> live signal" + (sigMeta.signals === 1 ? "" : "s"));
   counts.innerHTML = parts.join("&nbsp;&nbsp;·&nbsp;&nbsp;");
   if (complete) {
     fill.classList.remove("indeterminate");
     fill.style.width = "100%";
-  } else {
-    fill.classList.remove("indeterminate");
-    // Each step owns a slice of the bar. Within that slice, fill proportionally
-    // using a soft cap (typical max events per step at demo scale).
-    const STEP_START = [0, 17, 33, 50, 67, 83];
-    const STEP_END   = [17, 33, 50, 67, 83, 97];
-    const STEP_CAP   = [12, 10, 20, 20, 8, 8];
-    let activeStep = -1;
-    for (let i = 5; i >= 0; i--) { if (stepData[i].length) { activeStep = i; break; } }
-    let pct;
-    if (activeStep < 0) {
-      pct = 5;
-    } else {
-      const within = Math.min(stepData[activeStep].length / STEP_CAP[activeStep], 0.9);
-      pct = STEP_START[activeStep] + within * (STEP_END[activeStep] - STEP_START[activeStep]);
-    }
-    fill.style.width = pct + "%";
+    return;
   }
+  fill.classList.remove("indeterminate");
+  let peak = 4;
+  milestones.forEach(m => { if (MILESTONE_PCT[m] != null) peak = Math.max(peak, MILESTONE_PCT[m]); });
+  fill.style.width = peak + "%";
 }
 
 function hideProgressBar() {
@@ -1508,153 +1266,124 @@ function hideProgressBar() {
 }
 
 /* -- Step drawer ------------------------------------------- */
-const DRAWER_AGENT_NAMES = {
-  yoy_sales:              "Year-over-Year Sales",
-  seasonal_peaks:         "Seasonal Peaks",
-  supplier_lead_times:    "Supplier Lead Times",
-  realtime_stock:         "Real-time Stock",
-  inbound_shipments:      "Inbound Shipments",
-  sellthrough_velocity:   "Sell-through Velocity",
-};
-function agentName(id) { return DRAWER_AGENT_NAMES[id] || String(id || "").replace(/_/g, " "); }
+function drawerTable(cols, tbody, extra) {
+  return "<div class='drawer-scroll'><table class='drawer-table'><thead><tr>"
+    + cols.map(c => "<th>" + c + "</th>").join("")
+    + "</tr></thead><tbody>" + tbody + "</tbody></table></div>" + (extra || "");
+}
+
+function signalsCell(ctx) {
+  const sigs = (ctx.signals || []);
+  if (!sigs.length) return "<span class='muted'>quiet</span>";
+  return sigs.map(s => {
+    const t = signalType(s.type);
+    const dir = directionInfo(s.direction);
+    return "<div class='d-sub'>" + t.name + " · " + esc(s.description || "")
+      + " (<span class='" + dir.cls + "'>" + dir.label + "</span>)</div>";
+  }).join("");
+}
 
 function renderDrawerContent(stepIdx) {
   const rows = stepData[stepIdx] || [];
   if (!rows.length) return "<em style='color:var(--midnight-soft);font-family:var(--serif);font-style:italic'>No data captured for this step yet.</em>";
 
-  if (stepIdx === 0) { // World monitors — card grid matching old "Incoming Signals" format
-    const cards = rows.map(t => {
-      const sentence = eventSentence(t.event_type, t.market, t.estimated_demand_impact, t.agent_id, { sku_id: t.sku_id, days_of_supply: t.days_of_supply, divergence_ratio: t.divergence_ratio });
-      if (!sentence) return "";
-      const m = monitor(t.agent_id);
-      const cats = (t.affected_sku_categories || []).map(categoryName).filter(Boolean);
-      const conf = confidenceLabel(t.confidence_score);
-      return "<div class='drawer-event-card'>"
-        + "<div class='dec-head'>"
-        + "<span class='b-icon'>" + m.sigil + "</span>"
-        + "<span class='b-name'>" + esc(m.name) + "</span>"
-        + "</div>"
-        + "<div class='dec-line'>" + esc(sentence) + "</div>"
-        + "<div class='dec-meta'>" + esc(marketName(t.market))
-        + " · " + esc(cats.length ? cats.join(", ") : "all categories")
-        + (conf ? " · " + esc(conf) : "") + "</div>"
-        + "</div>";
-    }).filter(Boolean);
-    return "<div class='drawer-event-grid'>" + cards.join("") + "</div>";
+  if (stepIdx === 0) { // Trigger
+    const t = rows[0] || {};
+    const cards = [
+      ["Run", t.run_id || "—"],
+      ["Reason", (t.reason || "").replace(/_/g, " ") || "daily schedule"],
+      ["Catalogue", num(t.sku_count) + " SKUs"],
+      ["Fired at", t.triggered_at ? new Date(t.triggered_at).toLocaleString() : "—"],
+    ].map(([k, v]) =>
+      "<div class='drawer-event-card'>"
+      + "<div class='dec-head'><span class='b-icon'>" + SIGILS.bolt + "</span><span class='b-name'>" + esc(k) + "</span></div>"
+      + "<div class='dec-line'>" + esc(v) + "</div></div>"
+    ).join("");
+    return "<div class='drawer-event-grid'>" + cards + "</div>";
   }
 
-  if (stepIdx === 1) { // Item Scope
-    const cols = ["Trigger from", "Products scoped", "Country"];
-    const tbody = rows.map(r => {
-      const skuList = (r.affected_skus || []).map(s => skuName(s.sku_id)).join(", ") || r.affected_sku_count + " products";
+  if (stepIdx === 1) { // Historical branch — merged baselines
+    const meta = (histMeta.shards != null)
+      ? "<div class='gap-label' style='margin-bottom:14px'>" + histMeta.shards + " shard(s) · "
+        + (histMeta.items != null ? histMeta.items + " items merged · " : "")
+        + "Earth 0.9 · analogues 0.1</div>"
+      : "";
+    const cols = ["Product", "Earth", "Regional", "Weighted baseline", "Data quality"];
+    const tbody = rows.map(b => {
+      const flags = (b.data_quality_flags || []).join(", ")
+        || "<span class='c-green'>clean</span>";
       return "<tr>"
-        + "<td><div class='d-main'>" + esc(agentName(r.source_trigger_agent)) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(skuList) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(marketName(r.market)) + "</div></td>"
+        + "<td><div class='d-main'>" + esc(b.sku.name) + "</div><div class='d-sub'>" + esc(categoryName(b.sku.category)) + "</div></td>"
+        + "<td><div class='d-main'>" + num(b.earth_baseline) + "</div></td>"
+        + "<td><div class='d-main'>" + num(b.regional_baseline) + "</div></td>"
+        + "<td><div class='d-main'>" + num(b.weighted_baseline) + " units</div></td>"
+        + "<td><div class='d-sub'>" + flags + "</div></td>"
         + "</tr>";
     }).join("");
-    return "<div class='drawer-scroll'><table class='drawer-table'><thead><tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" + tbody + "</tbody></table></div>"
-      + renderFilterGap(1);
+    return meta + drawerTable(cols, tbody);
   }
 
-  if (stepIdx === 2) { // History agents
-    const cols = ["Agent", "Product", "Country", "Key finding"];
-    const tbody = rows.map(r => {
-      const d = r.data || r.key_data || {};
-      let main = "—", sub = "";
-      if (r.agent_id === "yoy_sales") {
-        const trend = trendLabel(d.trend) || (d.trend || "No trend data");
-        const yoy = d.yoy_growth_pct != null ? (d.yoy_growth_pct > 0 ? "+" : "") + Math.round(d.yoy_growth_pct) + "% year-over-year" : "";
-        main = trend + (r.risk_flag ? " · risk flag" : "");
-        sub = [yoy, d.sellthrough_rate != null ? Math.round(d.sellthrough_rate * 100) + "% sell-through" : ""].filter(Boolean).join(" · ");
-      } else if (r.agent_id === "seasonal_peaks") {
-        const trendMap = { growing: "Growing", stable: "Stable", shrinking: "Shrinking" };
-        main = trendMap[d.three_year_trend] || d.three_year_trend || "No trend data";
-        const peak = d.peak_uplift_multiplier != null ? "Peak ×" + Number(d.peak_uplift_multiplier).toFixed(1) : "";
-        const onset = d.peak_onset_days != null ? "in " + d.peak_onset_days + " days" : "";
-        sub = [peak, onset].filter(Boolean).join(" ");
-      } else if (r.agent_id === "supplier_lead_times") {
-        main = d.recommended_order_trigger_days != null ? "Order " + d.recommended_order_trigger_days + " days ahead" : "—";
-        sub = d.variability_score != null ? (d.variability_score < 0.3 ? "Low" : d.variability_score < 0.6 ? "Moderate" : "High") + " variability" : "";
-      }
+  if (stepIdx === 2) { // Signals branch
+    const meta = (sigMeta.conflicts != null)
+      ? "<div class='gap-label' style='margin-bottom:14px'>" + (sigMeta.signals || 0) + " signal(s) · "
+        + sigMeta.conflicts + " item(s) with internal conflict</div>"
+      : "";
+    const cols = ["Product", "Live signals", "Net pull"];
+    const tbody = rows.map(ctx => {
+      const dir = directionInfo(ctx.net_direction);
+      const conflict = ctx.has_conflict ? " <span class='c-amber'>· conflict</span>" : "";
       return "<tr>"
-        + "<td><div class='d-main'>" + esc(agentName(r.agent_id)) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(skuName(r.sku_id)) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(marketName(r.market)) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(main) + "</div>" + (sub ? "<div class='d-sub'>" + esc(sub) + "</div>" : "") + "</td>"
+        + "<td><div class='d-main'>" + esc(ctx.sku.name) + "</div></td>"
+        + "<td>" + signalsCell(ctx) + "</td>"
+        + "<td><div class='d-main " + dir.cls + "'>" + esc(cap(ctx.net_direction)) + "</div><div class='d-sub'>" + dir.label + conflict + "</div></td>"
         + "</tr>";
     }).join("");
-    return "<div class='drawer-scroll'><table class='drawer-table'><thead><tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" + tbody + "</tbody></table></div>";
+    return meta + drawerTable(cols, tbody);
   }
 
-  if (stepIdx === 3) { // Stock agents
-    const cols = ["Agent", "Product", "Country", "Stock condition", "Detail"];
+  if (stepIdx === 3) { // Synthesizer — forecasts
+    const cols = ["Product", "Forecast range", "Widened", "Confidence", "Divergence"];
     const tbody = rows.map(r => {
-      const d = r.data || r.key_data || {};
-      let condHtml = "—", detail = "";
-      if (r.agent_id === "realtime_stock") {
-        const st = d.status ? stockStatus(d.status) : null;
-        condHtml = st ? "<span class='pill " + st.cls + "'>" + esc(st.label) + "</span>" : "—";
-        detail = d.days_of_supply != null ? Math.round(d.days_of_supply) + " days of supply" : "";
-        if (r.hard_override) detail += (detail ? " · " : "") + "override active";
-      } else if (r.agent_id === "inbound_shipments") {
-        condHtml = d.shipment_on_time === false ? "<span class='pill p-amber'>Delayed</span>"
-          : d.shipment_on_time === true ? "<span class='pill p-green'>On time</span>" : "—";
-        detail = [
-          d.inbound_units != null ? d.inbound_units + " units" : "",
-          d.adjusted_days_of_supply != null ? "adj. " + Math.round(d.adjusted_days_of_supply) + " days" : ""
-        ].filter(Boolean).join(" · ");
-      } else if (r.agent_id === "sellthrough_velocity") {
-        const vel = d.divergence_ratio != null ? velocityPhrase(d.divergence_ratio) : "—";
-        condHtml = "<span>" + esc(vel) + "</span>";
-        detail = d.projected_stockout_days != null ? "Stockout in " + Math.round(d.projected_stockout_days) + " days" : "";
-      }
+      const fr = r.forecast_range || {};
       return "<tr>"
-        + "<td><div class='d-main'>" + esc(agentName(r.agent_id)) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(skuName(r.sku_id)) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(marketName(r.market)) + "</div></td>"
-        + "<td>" + condHtml + "</td>"
-        + "<td><div class='d-sub'>" + esc(detail || "—") + "</div></td>"
+        + "<td><div class='d-main'>" + esc(r.sku.name) + "</div></td>"
+        + "<td><div class='d-main'>" + esc(rangePhrase(fr)) + "</div><div class='d-sub'>low · expected · high</div></td>"
+        + "<td>" + (fr.widened ? "<span class='pill p-amber'>Widened</span>" : "<span class='muted'>no</span>") + "</td>"
+        + "<td><div class='d-main'>" + esc(confidenceLabel(r.confidence)) + "</div><div class='d-sub'>" + esc(pct(r.confidence)) + "</div></td>"
+        + "<td><div class='d-main'>" + (r.divergence_score != null ? Number(r.divergence_score).toFixed(1) + "σ" : "—") + "</div></td>"
         + "</tr>";
     }).join("");
-    return "<div class='drawer-scroll'><table class='drawer-table'><thead><tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" + tbody + "</tbody></table></div>";
+    return drawerTable(cols, tbody);
   }
 
-  if (stepIdx === 4) { // Forecast
-    const cols = ["Product", "Country", "Forecast range", "Confidence", "Note"];
+  if (stepIdx === 4) { // Order recommendations
+    const cols = ["Product", "Action", "Quantity", "Supplier / route", "Escalation"];
     const tbody = rows.map(r => {
-      const parts = String(r.target || "").split("@");
-      const range = num(r.low) + " – " + num(r.expected) + " – " + num(r.high) + " units";
-      const note = r.escalate ? "<span style='color:var(--rust)'>Conflicting signals</span>" : "—";
+      const flags = (r.escalation_flags || []).map(f => flagLabel(f.flag_type)).join(", ")
+        || "<span class='c-green'>none</span>";
+      const route = [r.supplier, r.warehouse].filter(Boolean).join(" · ") || "—";
       return "<tr>"
-        + "<td><div class='d-main'>" + esc(skuName(parts[0])) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(marketName(parts[1])) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(range) + "</div><div class='d-sub'>low · expected · high</div></td>"
-        + "<td><div class='d-main'>" + esc(confidenceLabel(r.confidence)) + "</div></td>"
-        + "<td>" + note + "</td>"
+        + "<td><div class='d-main'>" + esc(r.sku.name) + "</div></td>"
+        + "<td><div class='d-main'>" + esc(cap(r.action)) + "</div></td>"
+        + "<td><div class='d-main'>" + num(r.quantity) + "</div></td>"
+        + "<td><div class='d-sub'>" + esc(route) + "</div></td>"
+        + "<td><div class='d-sub'>" + flags + "</div></td>"
         + "</tr>";
     }).join("");
-    return "<div class='drawer-scroll'><table class='drawer-table'><thead><tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" + tbody + "</tbody></table></div>"
-      + renderFilterGap(4);
+    return drawerTable(cols, tbody);
   }
 
-  if (stepIdx === 5) { // Decisions
-    const cols = ["Product", "Market", "Verdict", "Net benefit", "Environmental cost", "Net score"];
-    const tbody = rows.map(r => {
-      const v = verdictInfo(r.verdict);
-      const env = envCost(r.carbon_score);
+  if (stepIdx === 5) { // Human review
+    const cols = ["Product", "Decision", "Notes"];
+    const tbody = rows.map(d => {
+      const info = decisionInfo(d.action);
       return "<tr>"
-        + "<td><div class='d-main'>" + esc(r.sku_name || "—") + "</div>"
-        + (r.action_type ? "<div class='d-sub'>" + esc(r.action_type) + "</div>" : "") + "</td>"
-        + "<td><div class='d-main'>" + esc(r.market_name || "—") + "</div></td>"
-        + "<td><span class='pill " + v.cls + "'>" + esc(v.label) + "</span></td>"
-        + "<td><div class='d-main'>" + esc(moneyPhrase(r.net_benefit_usd)) + "</div></td>"
-        + "<td><div class='d-main " + esc(env.cls) + "'>" + esc(env.label) + "</div></td>"
-        + "<td><div class='d-main'>" + (r.net_score != null ? Math.round(r.net_score) : "—") + "</div></td>"
+        + "<td><div class='d-main'>" + esc(skuName(d.sku_id)) + "</div></td>"
+        + "<td><span class='pill " + info.cls + "'>" + esc(info.label) + "</span></td>"
+        + "<td><div class='d-sub'>" + esc(d.modifier_notes || "—") + "</div></td>"
         + "</tr>";
     }).join("");
-    return "<div class='drawer-scroll'><table class='drawer-table'><thead><tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" + tbody + "</tbody></table></div>"
-      + renderFilterGap(5);
+    return drawerTable(cols, tbody);
   }
 
   return "";
@@ -1664,7 +1393,6 @@ function toggleDrawer(stepIdx) {
   const drawer = $("step-drawer");
   if (!drawer) return;
   if (activeDrawerStep === stepIdx) {
-    // Close
     drawer.className = "";
     drawer.innerHTML = "";
     activeDrawerStep = -1;
@@ -1677,41 +1405,14 @@ function toggleDrawer(stepIdx) {
     + renderDrawerContent(stepIdx);
 }
 
-/* -- Reasoning chain in decision cards --------------------- */
+/* -- Reasoning chain in order cards ------------------------ */
 
-function p1Finding(p) {
-  const d = p.data || {};
-  const trend = trendLabel(d.trend) || "—";
-  const yoy = d.yoy_growth_pct != null ? " · " + (d.yoy_growth_pct > 0 ? "+" : "") + Math.round(d.yoy_growth_pct) + "% YoY" : "";
-  const sellthrough = d.sellthrough_rate != null ? " · " + Math.round(d.sellthrough_rate * 100) + "% sell-through" : "";
-  const peak = d.peak_uplift_multiplier != null ? " · peak ×" + d.peak_uplift_multiplier.toFixed(1) : "";
-  const lead = d.recommended_order_trigger_days != null ? "Order " + d.recommended_order_trigger_days + " days ahead" : "";
-  const variability = d.variability_score != null ? " · variability " + (d.variability_score < 0.3 ? "low" : d.variability_score < 0.6 ? "moderate" : "high") : "";
-  if (p.agent_id === "yoy_sales") return trend + yoy + sellthrough + (p.risk_flag ? " · risk flag" : "");
-  if (p.agent_id === "seasonal_peaks") return trend + peak;
-  if (p.agent_id === "supplier_lead_times") return lead + variability;
-  return trend;
-}
-
-function p2Finding(p) {
-  const d = p.data || {};
-  const st = d.status ? stockStatus(d.status).label : "—";
-  const days = d.days_of_supply != null ? " · " + Math.round(d.days_of_supply) + " days of supply" : "";
-  const vel = d.divergence_ratio != null ? " · " + velocityPhrase(d.divergence_ratio) : "";
-  const inbound = d.inbound_units != null ? d.inbound_units + " units arriving" : "";
-  const adj = d.adjusted_days_of_supply != null ? " · adjusted " + Math.round(d.adjusted_days_of_supply) + " days" : "";
-  if (p.agent_id === "realtime_stock") return st + days + (p.hard_override ? " · override active" : "");
-  if (p.agent_id === "inbound_shipments") return inbound + adj || "—";
-  if (p.agent_id === "sellthrough_velocity") return vel.slice(3) || "—";
-  return st;
-}
-
-function buildReasoningChain(e, run) {
-  if (!run || !e) return "";
-  const key = e.action.target.sku.id + "@" + e.action.target.market.code;
-  const p1s = (run.p1_outputs || []).filter(p => p.sku_id + "@" + p.market === key);
-  const p2s = (run.p2_outputs || []).filter(p => p.sku_id + "@" + p.market === key);
-  const dem = (run.demand || []).find(d => d.target.sku.id + "@" + d.target.market.code === key);
+function buildReasoningChain(rec, run) {
+  if (!run || !rec) return "";
+  const id = rec.sku.id;
+  const baseline = (run.merged_baselines || []).find(b => b.sku.id === id);
+  const signals = (run.signal_contexts || []).find(s => s.sku.id === id);
+  const decision = (run.human_decisions || []).find(d => d.recommendation_id === rec.id);
 
   function rr(agent, finding) {
     return "<div class='reason-row'>"
@@ -1722,85 +1423,93 @@ function buildReasoningChain(e, run) {
 
   let html = "<div class='reasoning-chain'>";
 
-  if (p1s.length) {
-    html += "<div class='reason-section-title'>Historical signals</div>";
-    p1s.forEach(p => { html += rr(agentName(p.agent_id), p1Finding(p)); });
+  if (baseline) {
+    html += "<div class='reason-section-title'>Historical branch (0.7)</div>";
+    html += rr("Merge & Weight",
+      "Earth " + num(baseline.earth_baseline) + " · analogues " + num(baseline.regional_baseline)
+      + " → weighted " + num(baseline.weighted_baseline) + " units (Earth 0.9 / analogues 0.1)"
+      + ((baseline.data_quality_flags || []).length ? " · " + baseline.data_quality_flags.join(", ") : ""));
   }
 
-  if (p2s.length) {
-    html += "<div class='reason-section-title'>Warehouse signals</div>";
-    p2s.forEach(p => { html += rr(agentName(p.agent_id), p2Finding(p)); });
+  if (signals) {
+    html += "<div class='reason-section-title'>Signals branch (0.3)</div>";
+    const sigs = signals.signals || [];
+    if (sigs.length) {
+      sigs.forEach(s => {
+        html += rr(signalType(s.type).name,
+          (s.description || "signal") + " · " + directionInfo(s.direction).label
+          + " (strength " + Number(s.strength).toFixed(2) + ")"
+          + (s.conflict_with_baseline ? " · opposes net pull" : ""));
+      });
+    } else {
+      html += rr("Signal Report", "No live signals this cycle");
+    }
+    if (signals.has_conflict) html += rr("Signal Report", "Conflicting signals preserved, not averaged");
   }
 
-  if (dem) {
-    html += "<div class='reason-section-title'>Demand forecast</div>";
-    const range = num(dem.forecast.units_low) + "–" + num(dem.forecast.units_high) + " units (expected " + num(dem.forecast.units_expected) + ")";
-    const conf = confidenceLabel(dem.forecast.confidence);
-    const brief = dem.forecast.reasoning ? dem.forecast.reasoning.slice(0, 130) + (dem.forecast.reasoning.length > 130 ? "…" : "") : range;
-    html += rr("Demand Synthesizer", brief + " · " + conf);
+  html += "<div class='reason-section-title'>Demand Synthesizer</div>";
+  const fr = rec.forecast_range || {};
+  html += rr("Synthesizer",
+    (rec.reasoning || rangePhrase(fr)) + " · " + confidenceLabel(rec.confidence)
+    + (fr.widened ? " · range widened" : "")
+    + (rec.divergence_score != null ? " · " + Number(rec.divergence_score).toFixed(1) + "σ divergence" : ""));
+
+  if ((rec.escalation_flags || []).length) {
+    rec.escalation_flags.forEach(f => html += rr("Escalation", flagLabel(f.flag_type) + " — " + f.reason));
   }
 
-  html += "<div class='reason-section-title'>Evaluation</div>";
-  if (e.financial) {
-    const fin = e.financial.reasoning ? e.financial.reasoning.slice(0, 120) + (e.financial.reasoning.length > 120 ? "…" : "") : moneyPhrase(e.financial.net_benefit_usd) + " · payback " + Math.round(e.financial.payback_days || 0) + " days";
-    html += rr("Financial Agent", fin);
-  }
-  if (e.carbon) {
-    const carb = e.carbon.reasoning ? e.carbon.reasoning.slice(0, 120) + (e.carbon.reasoning.length > 120 ? "…" : "") : envCost(e.carbon.score).label + " environmental cost" + (e.carbon.credit_eligible ? " · carbon credit eligible" : "");
-    html += rr("Sustainability Agent", carb);
-  }
-  if (e.decision) {
-    const dec = e.decision.reasoning ? e.decision.reasoning.slice(0, 160) + (e.decision.reasoning.length > 160 ? "…" : "") : "Net score " + Math.round(e.decision.net_score || 0);
-    html += rr("Tradeoff Agent", dec);
+  if (decision) {
+    html += "<div class='reason-section-title'>Human in the loop</div>";
+    html += rr(decisionInfo(decision.action).label, decision.modifier_notes || cap(decision.action));
   }
 
   html += "</div>";
   return html;
 }
 
-function cardWithReasoning(baseHtml, actionId, e, run) {
-  const isOpen = reasoningOpen.has(actionId);
-  const chain = isOpen ? buildReasoningChain(e, run) : "";
+function cardWithReasoning(baseHtml, recId, rec, run) {
+  const isOpen = reasoningOpen.has(recId);
+  const chain = isOpen ? buildReasoningChain(rec, run) : "";
   const toggleLabel = isOpen ? "Hide reasoning ▴" : "Show reasoning ▸";
   return baseHtml
-    + "<button class='reason-toggle' onclick='toggleReasoning(\"" + esc(actionId) + "\")'>" + toggleLabel + "</button>"
+    + "<button class='reason-toggle' onclick='toggleReasoning(\"" + esc(recId) + "\")'>" + toggleLabel + "</button>"
     + chain;
 }
 
-function toggleReasoning(actionId) {
-  if (reasoningOpen.has(actionId)) {
-    reasoningOpen.delete(actionId);
-  } else {
-    reasoningOpen.add(actionId);
-  }
+function toggleReasoning(recId) {
+  if (reasoningOpen.has(recId)) reasoningOpen.delete(recId);
+  else reasoningOpen.add(recId);
   if (lastRun) {
-    renderSuggestions(lastRun);
-    renderDecisions(lastRun);
-    renderBlocked(lastRun);
+    renderOrders(lastRun);
+    renderReviews(lastRun);
+    renderHeld(lastRun);
   }
 }
 
 /* ============================================================
    6. STREAM HANDLING
    ============================================================ */
+const STATUS_TEXT = {
+  trigger: "Daily trigger fired — both branches running…",
+  hist_shards: "Historical manager sharded the catalogue…",
+  sig_processed: "Signal processing pulled the last 24h…",
+  hist_workers_done: "Workers finished their shards…",
+  sig_report: "Signal report mapped signals to items…",
+  hist_merged: "Merge & weight produced baselines…",
+  synthesizing: "Demand synthesizer blending branches…",
+  recommendations: "Order recommendations packaged…",
+};
+
 function applyStreamEvent(event, data) {
-  if (event === "p3_trigger" || event === "p3_signal_derived") {
-    runCounts.world++;
-  }
+  milestones.add(event);
 
-  // ---- stepData buckets ----
-  if (event === "p3_trigger" || event === "p3_signal_derived") stepData[0].push(data);
-  if (event === "item_synthesized") stepData[1].push(data);
-  if (event === "p1_result")  stepData[2].push(data);
-  if (event === "p2_result")  stepData[3].push(data);
-  if (event === "demand")     stepData[4].push(data);
-  if (event === "decision")   stepData[5].push(data);
+  if (event === "hist_merged") histMeta.items = data.items;
+  if (event === "hist_shards") histMeta.shards = data.shards;
+  if (event === "hist_workers_done" && data.items != null) histMeta.items = data.items;
+  if (event === "sig_processed") sigMeta.signals = data.signals;
+  if (event === "sig_report") sigMeta.conflicts = data.conflicts;
 
-  // ---- progress counts ----
-  if (event === "p1_result" || event === "p2_result") {
-    const k = (data.sku_id || "") + "@" + (data.market || "");
-    if (!runCounts.seenAnalyzed[k]) { runCounts.seenAnalyzed[k] = true; runCounts.analyzed++; }
-  }
+  if (STATUS_TEXT[event]) $("status").textContent = STATUS_TEXT[event];
   updateProgressBar(false);
 }
 
@@ -1819,12 +1528,12 @@ function startRun() {
 
   resetState();
   resetSteps();
-  $("suggestions").innerHTML = "";
-  $("suggest-section").style.display = "none";
-  $("decisions").innerHTML = "";
-  $("decide-section").style.display = "none";
-  $("blocked").innerHTML = "";
-  $("blocked-section").style.display = "none";
+  $("orders").innerHTML = "";
+  $("orders-section").style.display = "none";
+  $("reviews").innerHTML = "";
+  $("review-section").style.display = "none";
+  $("held").innerHTML = "";
+  $("held-section").style.display = "none";
   $("results-ready").style.display = "none";
   $("results-ready").innerHTML = "";
   $("status").textContent = "Initiating survey…";

@@ -1,54 +1,52 @@
-# Cosmic Mart — Multi-Agent Supply Chain Architecture
+# Cosmic Mart — Demand Forecasting Pipeline
 
-Cosmic Mart operates across 10 Earth markets and carries a pre-tax loss of $7.84B, a
-significant share of it from inventory misalignment: overstocking low-demand markets while
-understocking high-demand ones. This repository implements the agent network that watches
-the world for demand-shifting events, scopes which products they touch, forecasts demand per
-SKU per market, prices the daily bleed on overstocked inventory, and weighs every proposed
-correction against both financial benefit and carbon cost before putting a recommendation in
-front of a human.
+A multi-agent agentic system that generates per-item inventory order recommendations for the
+North American market. A daily historical-analysis branch and a continuously running signals
+branch are merged in a weighted demand synthesizer; every recommendation is reviewed by a
+human before execution. When historical baselines and live signals disagree, the forecast
+range widens and both views are surfaced to the reviewer — conflict is preserved, not
+averaged away.
+
+Initial deployment covers North America only (US, Canada, Mexico, and Other North America).
+Other regions follow in later rollout phases once North American operation is validated.
 
 Built on the Anthropic Python SDK with `claude-opus-5`.
 
 ## The pipeline
 
 ```
-5 world monitors (parallel)
-  holiday calendar · weather watch · social media · economy tracker · local news
-                    │  TriggerSignal per market
-                    ▼
-          Item Scope Agent
-          (maps each trigger to affected SKU categories)
-                    │  ItemSynthesizerOutput per trigger
-          ┌─────────┴─────────┐
-          ▼                   ▼
-  3 history agents      3 stock agents        (parallel within each group)
-  Year-over-Year Sales  Real-time Stock
-  Seasonal Peaks        Inbound Shipments
-  Supplier Lead Times   Sell-through Velocity
-          └─────────┬─────────┘
-                    ▼
-          Demand Synthesizer
-          (probabilistic range; conflicts named, not averaged)
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
-  Financial Agent      Sustainability Agent   (parallel)
-  (net dollar benefit) (carbon score 0–100)
-          └─────────┬─────────┘
-                    ▼
-          Tradeoff Agent
-          net = financial benefit − carbon penalty
-          ┌─────────┼─────────┐
-       approve     flag     block ──┐
-          └─────────┴──┐            │ feedback loop
-                       ▼            ▼
-              Human-in-the-loop   Overstock agent
-              CFO / CSO           (suppresses re-proposal)
+Trigger (daily schedule)
+       │  fires both branches in parallel
+  ─────┴───────────────────────────────┐
+  Historical Branch (weight 0.7)        Signals Branch (weight 0.3)
+  ┌──────────────────────────────┐      ┌───────────────────────────┐
+  │ Inputs:                       │      │ Inputs:                    │
+  │  · 4 yr Earth Sales (0.9)     │      │  · New Drops + Promos       │
+  │  · 25 yr Regional Data (0.1)  │      │  · Large Events             │
+  │  · YoY Annotated Sales        │      │  · News Agent               │
+  │                               │      │                             │
+  │ Historical Manager            │      │ Signal Processing Agent     │
+  │   → Worker 1..n (parallel)    │      │   → Signal Report Agent     │
+  │   → Merge and Weight          │      └───────────────────────────┘
+  └──────────────────────────────┘
+                 │                                  │
+                 └───────────────┬──────────────────┘
+                                 ▼
+                        Demand Synthesizer
+                   (conflict → range widens, not averaged)
+                                 │
+                        Order Recommendation
+                   (reorder · rebalance · hold)
+                                 │
+                        Human in the Loop
+                   (approve · modify · reject · escalate)
 ```
 
-Every stage shown side by side runs concurrently. Block verdicts never reach a human — they
-are logged back to the overstock agent, which suppresses the same proposal on later runs.
+The historical branch is a map-reduce: the manager shards the SKU catalogue across parallel
+workers, each producing a per-item demand context, and Merge and Weight reduces them into one
+weighted baseline (Earth 0.9, analogues 0.1). The signals branch runs continuously, pulling
+the last 24 hours across three live feeds and mapping detected signals to specific items. The
+synthesizer waits for both branches, then blends them 0.7 / 0.3 per item.
 
 ## Quick start
 
@@ -66,8 +64,8 @@ python -m cosmic_mart.cli run --offline
 ```
 
 Every agent has a deterministic heuristic that stands in for its Claude call, so `--offline`
-exercises the complete graph — routing, the feedback loop, the credit bank — for free. It is
-also what the tests run against.
+exercises the complete graph — both branches, the map-reduce, conflict widening, the human
+gate — for free. It is also what the tests run against.
 
 To use Claude, set a key and drop the flag:
 
@@ -82,96 +80,83 @@ picks it up automatically, no code change needed.
 Other commands:
 
 ```bash
-python -m cosmic_mart.cli markets              # the 10 markets and the SKU catalogue
-python -m cosmic_mart.cli run --market IN      # restrict to one market
+python -m cosmic_mart.cli markets              # sub-markets and the SKU catalogue
 python -m cosmic_mart.cli run --sku GAD-1001   # restrict to one SKU
-python -m cosmic_mart.cli run --limit 4        # process fewer SKU/market pairs
+python -m cosmic_mart.cli run --limit 4        # process fewer SKUs
 python -m cosmic_mart.cli run --verbose        # stream every agent event
 python -m cosmic_mart.cli run --save run.json  # persist the full typed run
 python -m cosmic_mart.cli serve                # dashboard on http://127.0.0.1:8000
 ```
 
-The dashboard streams every pipeline stage live over server-sent events. Each step in the
+The dashboard streams every pipeline stage live over server-sent events. Each stage in the
 workflow is clickable and opens a drawer showing that agent's full output. When the run
-completes, the page scrolls to the recommended maneuvers and explains which items were
-filtered at each transition and why.
+completes, the page scrolls to the recommended orders, grouped by the reviewer's decision.
 
 ## The agents
 
-**World monitors.** Five specialists in `agents/signals.py`, each scoped to one domain.
-Cadences differ — social media is real-time, weather hourly, holiday calendar and economy
-tracker daily, local news event-driven. Each fires a `TriggerSignal` carrying the event
-type, estimated demand impact, and affected SKU categories.
+**Trigger.** Fires on a fixed daily schedule, dispatching both branches in parallel against
+the full North American SKU catalogue. The synthesizer waits for both to complete.
 
-**Item Scope Agent.** Maps each trigger's affected categories to the actual SKU catalogue,
-producing one `ItemSynthesizerOutput` per trigger listing the specific (SKU, market) pairs
-that flow into the rest of the pipeline.
+**Historical Manager.** Receives the trigger and shards the catalogue into `n` parallel work
+units (configurable via `COSMIC_MART_WORKERS`). In a real deployment it tracks worker
+completion, retries failed shards, and assembles the merge when all workers report back.
 
-**History agents (P1).** Three specialists run in parallel per scoped target: Year-over-Year
-Sales (trend, sell-through rate), Seasonal Peaks (uplift multiplier, onset days), and
-Supplier Lead Times (order trigger days, variability). Their outputs feed the demand
-synthesizer.
+**Workers (parallel).** Each processes one shard: loads Earth and regional sales history,
+applies the YoY annotation layer, and produces a per-item demand context. Independent — no
+inter-worker communication. Total time is bounded by the slowest shard, not the full
+catalogue.
 
-**Stock agents (P2).** Three specialists run in parallel per scoped target: Real-time Stock
-(days of supply, hard override flag), Inbound Shipments (on-time status, adjusted days of
-supply), and Sell-through Velocity (divergence ratio, projected stockout). P2 can hard-
-override the demand forecast when current stock conditions dominate.
+**Merge and Weight.** Reduces all worker outputs into one weighted demand baseline per item:
+`earth × 0.9 + regional × 0.1`. Flags items with sparse Earth data so the analogue weight
+carries more of the forecast. This is the historical branch's final output.
 
-**Demand Synthesizer.** Reconciles history and stock signals into one probabilistic range,
-never a point estimate. Conflicts are not averaged away: when two signals pull in opposite
-directions the range widens and both agents are named. `SignalAccuracyLedger` re-weights
-each signal from its realized accuracy over time.
+**Signal Processing Agent.** Always-on. Pulls the last 24 hours across three feeds (new drops
++ promos, large events, news), deduplicates across streams, and scores signal strength per
+SKU using the catalogue as the reference frame.
 
-**Overstock loss agent.** A continuous cost clock computing three loss components per unit
-per day — capital tied up, storage fees, and depreciation. Depreciation dominates for
-gadgets, which are 77% of revenue and go stale as new models release. Excess is measured
-against the *high* end of the forecast, so stock is only called overstock when even good
-demand leaves it unsold.
+**Signal Report Agent.** Maps processed signals to specific items. When a signal contradicts
+the net pull it records both views and flags the divergence rather than resolving it — the
+synthesizer receives the full tension.
 
-**Financial agent.** Nets holding-loss savings against execution cost, and keeps a rolling
-impact log that auto-assembles the CFO's weekly report.
+**Demand Synthesizer.** The core decision agent. Blends the historical baseline (0.7) with
+the signal report (0.3) per item. When the two disagree it does *not* average: it anchors on
+the historical baseline and widens the forecast range to cover both scenarios, flagging the
+divergence for review.
 
-**Sustainability agent.** Scores each action 0–100 on carbon burden from a tonne-km freight
-model, and runs a `CarbonCreditBank` that logs wins as credits to offset later quarters.
+**Order Recommendation.** Packages the synthesizer output into an executable order —
+reorder, rebalance, or hold — with quantity, supplier, warehouse routing, confidence, and
+forecast range.
 
-**Tradeoff agent.** The convergence point. `net = financial benefit − (carbon score ×
-carbon price)`, routed to approve, flag, or block. Flags surface both raw scores rather than
-a reconciled verdict, so the reviewer sees the tension.
-
-**Human gate.** CFO Rowan Ortega takes financial escalations, CSO Finley Martin takes
-sustainability-contested ones.
+**Human in the Loop.** Final reviewer for every recommendation. Sees the full synthesizer
+context including any conflict summary and widened range, and chooses approve, modify, reject,
+or escalate. The system assists but never executes autonomously.
 
 ## Calibration
 
-Four settings in `config.py` decide whether the system behaves sensibly, and all four were
-tuned against real runs:
+Settings in `config.py`, tuned so the pipeline behaves sensibly:
 
 | Setting | Value | Why it matters |
 |---|---|---|
-| `carbon_price_usd_per_point` | `300.0` | Too low and carbon can never change a verdict, making the sustainability agent decorative. Too high and everything blocks. |
-| `escalation_confidence_floor` | `0.40` | Set near the typical forecast confidence and every forecast escalates, defeating the gate. |
-| `approve_confidence_floor` | `0.45` | Gates straight approvals on the forecast actually being solid. |
-| `approve_threshold_usd` | `15_000.0` | Calibrated against the conservative benefits the financial agent returns; set higher and nothing clears a straight approval. |
-
-`carbon_price_usd_per_point` is the main policy lever: raise it to make Cosmic Mart
-greener, lower it to prioritise cash recovery.
+| `hist_branch_weight` / `sig_branch_weight` | `0.7` / `0.3` | The blend between the daily anchor and live signals. |
+| `earth_data_weight` / `regional_data_weight` | `0.9` / `0.1` | Within the merge step. New expansions with thin Earth history may raise the analogue weight. |
+| `escalation_value_threshold_usd` | `50_000` | Reorder value past this escalates to a human. |
+| `escalation_confidence_floor` | `0.45` | A forecast less certain than this cannot proceed autonomously. |
+| `divergence_std_threshold` | `2.0` | Divergence past this many standard deviations flags a conflict for review. |
+| `worker_count` | `3` | Historical Manager shard count; scale to catalogue size and SLA. |
 
 ## Swapping in real data
 
-Everything behind the agents sits behind the `SignalSource` and `InventorySource` protocols
-in `adapters/base.py`. `adapters/mock.py` supplies deterministic synthetic data seeded from
-`COSMIC_MART_SEED`. To go live, implement `observe()` against a real API and register it:
+The three feeds sit behind the `EarthSalesSource`, `RegionalDataSource`, and
+`SignalsFeedSource` protocols in `adapters/base.py`. The default providers supply
+deterministic synthetic data seeded from `COSMIC_MART_SEED`. To go live, implement `observe()`
+against a real API and inject it into the worker or signal-processing agent:
 
 ```python
-from cosmic_mart.adapters.base import SourceRegistry
-from cosmic_mart.models import SignalKind
+from cosmic_mart.models import SKU
 
-class RealWeatherSource:
-    kind = SignalKind.WEATHER
-    async def observe(self, target):
-        return await my_weather_api.forecast(target.market.code)
-
-registry.signals[SignalKind.WEATHER] = RealWeatherSource()
+class RealEarthSales:
+    async def observe(self, sku: SKU) -> dict:
+        return await my_sales_api.history(sku.id)
 ```
 
 No agent code changes — agents consume the payload, not the source.
@@ -182,34 +167,35 @@ No agent code changes — agents consume the payload, not the source.
 python -m pytest
 ```
 
-Ten tests covering signal validity, an end-to-end offline pass, offline determinism, the
-three-component cost clock, gadgets depreciating faster than home goods, block routing on a
-negative net score, the block feedback loop, credit bank overdraft protection, ledger
-re-weighting, and escalation on conflicting signals.
+Ten tests covering manager sharding coverage, worker per-item context, merge weighting math,
+sparse-data flagging, signal conflict detection, forecast-range widening under conflict, clean
+blends without widening, the human gate approving clean recommendations, an end-to-end offline
+pass, and offline determinism.
 
 ## Layout
 
 ```
 cosmic_mart/
-  models.py             typed contracts between every agent
-  config.py             settings and calibration
-  data.py               10 markets, SKU catalogue
+  models.py             typed contracts between every agent (§7.2 data contracts)
+  config.py             settings and calibration (branch + data weights)
+  data.py               North American sub-markets, SKU catalogue
   llm.py                Claude access; every agent asks for a Pydantic type
-  orchestrator.py       the six-step pipeline graph
+  orchestrator.py       the two-branch pipeline graph
   cli.py                terminal interface (run, markets, serve)
-  adapters/             SignalSource / InventorySource protocols + mocks
+  adapters/
+    base.py             EarthSales / RegionalData / SignalsFeed protocols
+    earth_sales.py      4 yr Earth sales provider (mock)
+    regional_data.py    25 yr regional analogue provider (mock)
+    signals_feed.py     live signal feed provider (mock)
   agents/
-    signals.py          5 world monitors (P3 triggers)
-    item_synthesizer.py maps triggers → affected SKUs
-    p1/                 3 history agents (YoY, seasonal peaks, lead times)
-    p2/                 3 stock agents (realtime, inbound, sell-through)
-    synthesizer.py      demand synthesizer
-    overstock.py        loss clock + block-feedback memory
-    financial.py        net benefit + CFO report
-    sustainability.py   carbon score + credit bank
-    tradeoff.py         verdict routing
-    human_gate.py       CFO / CSO gate queue
-    proposals.py        overstock → proposed actions
+    historical_manager.py   shards the catalogue (map)
+    historical_worker.py    per-item demand context per shard
+    merge_and_weight.py     weighted baseline (reduce)
+    signal_processing.py    always-on 24h signal pull
+    signal_report.py        maps signals to items, preserves conflict
+    demand_synthesizer.py   blends 0.7 / 0.3, widens on conflict
+    order_recommendation.py packages executable orders
+    human_gate.py           approve / modify / reject / escalate
   web/
     app.py              FastAPI + SSE endpoint
     static/index.html   single-file dashboard (no build step)
