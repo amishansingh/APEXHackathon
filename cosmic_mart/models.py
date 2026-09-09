@@ -14,10 +14,11 @@ def _now() -> datetime:
 
 
 class Cadence(str, Enum):
+    MONTHLY = "monthly"
+    WEEKLY = "weekly"
+    DAILY = "daily"
     REAL_TIME = "real-time"
     HOURLY = "hourly"
-    DAILY = "daily"
-    WEEKLY = "weekly"
     EVENT_DRIVEN = "event-driven"
 
 
@@ -89,6 +90,53 @@ class AttributedSignal(BaseModel):
 # --- Demand synthesis -------------------------------------------------------
 
 
+class TriggerSignal(BaseModel):
+    agent_id: str
+    market: str
+    event_type: str
+    estimated_demand_impact: float  # multiplier, e.g. 1.2 = +20%
+    affected_sku_categories: list[str]
+    timestamp: datetime = Field(default_factory=_now)
+    cadence: Cadence
+    first_run: bool = False
+    confidence_score: float = Field(ge=0.0, le=1.0)
+
+
+class AffectedSKU(BaseModel):
+    sku_id: str
+    market: str
+    category: str
+
+
+class ItemSynthesizerOutput(BaseModel):
+    affected_skus: list[AffectedSKU]
+    source_trigger: TriggerSignal
+
+
+class P1ImpactScore(BaseModel):
+    importance: float = Field(ge=0.0, le=1.0)
+    magnitude: float  # demand multiplier
+    longevity: float  # weeks
+
+
+class P1Output(BaseModel):
+    sku_id: str
+    market: str
+    agent_id: str
+    data: dict
+    impact_score: P1ImpactScore
+    risk_flag: bool = False
+
+
+class P2Output(BaseModel):
+    sku_id: str
+    market: str
+    agent_id: str
+    data: dict
+    hard_override: bool = False
+    immediate_rerun_trigger: bool = False
+
+
 class DemandForecast(BaseModel):
     units_low: int = Field(ge=0)
     units_expected: int = Field(ge=0)
@@ -99,6 +147,12 @@ class DemandForecast(BaseModel):
         description="Names of signal agents whose readings pull in opposite directions.",
     )
     reasoning: str
+    sku_classification: str = "established"
+    risk_flag: bool = False
+    first_run_signal: bool = False
+    route: str = "automated_report"
+    recommended_order_quantity: int = 0
+    order_trigger_date: str = ""
 
 
 class SynthesizedDemand(BaseModel):
@@ -238,3 +292,7 @@ class PipelineRun(BaseModel):
     gate_queue: list[GateItem] = Field(default_factory=list)
     blocked: list[BlockRecord] = Field(default_factory=list)
     carbon_credits_kg: float = 0.0
+    p3_triggers: list[TriggerSignal] = Field(default_factory=list)
+    item_synthesizer_outputs: list[ItemSynthesizerOutput] = Field(default_factory=list)
+    p1_outputs: list[P1Output] = Field(default_factory=list)
+    p2_outputs: list[P2Output] = Field(default_factory=list)

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..models import Cadence, SKUMarket, SignalKind
+from ..models import Cadence, SKUMarket, SignalKind, TriggerSignal
 from .base import SignalAgent, SignalEstimate
+
+if TYPE_CHECKING:
+    pass
 
 _PREAMBLE = (
     "You are a specialist agent inside Cosmic Mart's supply chain system. "
@@ -20,7 +23,8 @@ _PREAMBLE = (
 class CulturalAgent(SignalAgent):
     kind = SignalKind.CULTURAL
     name = "cultural_intelligence"
-    cadence = Cadence.DAILY
+    cadence = Cadence.MONTHLY
+    first_run_lookback_days = 30
     system = (
         f"{_PREAMBLE}\n\nYou are the CULTURAL INTELLIGENCE agent. You maintain a living "
         "cultural profile per market: holidays, religious observances, regional consumer "
@@ -43,11 +47,23 @@ class CulturalAgent(SignalAgent):
             drivers=[raw["upcoming_observance"]],
         )
 
+    def generate_trigger(self, raw: dict, target: SKUMarket, estimate: SignalEstimate) -> TriggerSignal:
+        return TriggerSignal(
+            agent_id=self.name,
+            market=target.market.code,
+            event_type=raw.get("upcoming_observance", "cultural_event"),
+            estimated_demand_impact=1.0 + estimate.demand_impact_pct / 100.0,
+            affected_sku_categories=["gadgets", "home"],
+            cadence=Cadence.MONTHLY,
+            confidence_score=estimate.confidence,
+        )
+
 
 class WeatherAgent(SignalAgent):
     kind = SignalKind.WEATHER
     name = "weather_climate"
-    cadence = Cadence.HOURLY
+    cadence = Cadence.WEEKLY
+    first_run_lookback_days = 7
     system = (
         f"{_PREAMBLE}\n\nYou are the WEATHER + CLIMATE agent. Map climate events to "
         "historical purchase behaviour by category and region: an early winter in Europe "
@@ -60,7 +76,6 @@ class WeatherAgent(SignalAgent):
         anomaly = float(raw["temp_anomaly_c"])
         category = target.sku.category
         if category == "appliances":
-            # Appliances split between heating and cooling; magnitude matters, not sign.
             impact = abs(anomaly) * 4.5
         elif category == "gadgets":
             impact = anomaly * 1.2
@@ -77,11 +92,23 @@ class WeatherAgent(SignalAgent):
             drivers=[raw["pattern"]],
         )
 
+    def generate_trigger(self, raw: dict, target: SKUMarket, estimate: SignalEstimate) -> TriggerSignal:
+        return TriggerSignal(
+            agent_id=self.name,
+            market=target.market.code,
+            event_type=raw.get("pattern", "weather_event"),
+            estimated_demand_impact=1.0 + estimate.demand_impact_pct / 100.0,
+            affected_sku_categories=["appliances", "gadgets"],
+            cadence=Cadence.WEEKLY,
+            confidence_score=estimate.confidence,
+        )
+
 
 class SocialTrendAgent(SignalAgent):
     kind = SignalKind.SOCIAL
     name = "social_trend_influencer"
-    cadence = Cadence.REAL_TIME
+    cadence = Cadence.DAILY
+    first_run_lookback_days = 1
     system = (
         f"{_PREAMBLE}\n\nYou are the SOCIAL TREND + INFLUENCER agent. When a product goes "
         "viral, size the demand spike from influencer reach times the historical conversion "
@@ -112,11 +139,25 @@ class SocialTrendAgent(SignalAgent):
             drivers=drivers,
         )
 
+    def generate_trigger(self, raw: dict, target: SKUMarket, estimate: SignalEstimate) -> TriggerSignal:
+        viral = raw.get("viral_event", False)
+        event_type = "viral_trend" if viral else "social_signal"
+        return TriggerSignal(
+            agent_id=self.name,
+            market=target.market.code,
+            event_type=event_type,
+            estimated_demand_impact=1.0 + estimate.demand_impact_pct / 100.0,
+            affected_sku_categories=["gadgets"],
+            cadence=Cadence.DAILY,
+            confidence_score=estimate.confidence,
+        )
+
 
 class MacroAgent(SignalAgent):
     kind = SignalKind.MACRO
     name = "macroeconomic_signal"
-    cadence = Cadence.WEEKLY
+    cadence = Cadence.DAILY
+    first_run_lookback_days = 1
     system = (
         f"{_PREAMBLE}\n\nYou are the MACROECONOMIC SIGNAL agent. You adjust the demand "
         "baseline every other agent forecasts against. Falling consumer confidence requires "
@@ -141,11 +182,23 @@ class MacroAgent(SignalAgent):
             drivers=["consumer confidence", "inflation"],
         )
 
+    def generate_trigger(self, raw: dict, target: SKUMarket, estimate: SignalEstimate) -> TriggerSignal:
+        return TriggerSignal(
+            agent_id=self.name,
+            market=target.market.code,
+            event_type="macro_shift",
+            estimated_demand_impact=1.0 + estimate.demand_impact_pct / 100.0,
+            affected_sku_categories=["gadgets", "appliances", "home"],
+            cadence=Cadence.DAILY,
+            confidence_score=estimate.confidence,
+        )
+
 
 class LocalEventsAgent(SignalAgent):
     kind = SignalKind.LOCAL_EVENTS
     name = "local_events_news"
-    cadence = Cadence.EVENT_DRIVEN
+    cadence = Cadence.DAILY
+    first_run_lookback_days = 1
     system = (
         f"{_PREAMBLE}\n\nYou are the LOCAL EVENTS + NEWS agent. You catch what cultural "
         "calendars and weather patterns miss: sports events, concerts, elections, product "
@@ -172,6 +225,18 @@ class LocalEventsAgent(SignalAgent):
             rationale=f"{raw['event']} in {raw['days_until']} days, "
             f"~{raw['estimated_footfall']:,} people affected.",
             drivers=[raw["event"]],
+        )
+
+    def generate_trigger(self, raw: dict, target: SKUMarket, estimate: SignalEstimate) -> TriggerSignal:
+        event_type = raw.get("event") or "no_event"
+        return TriggerSignal(
+            agent_id=self.name,
+            market=target.market.code,
+            event_type=event_type,
+            estimated_demand_impact=1.0 + estimate.demand_impact_pct / 100.0,
+            affected_sku_categories=["gadgets", "home"],
+            cadence=Cadence.DAILY,
+            confidence_score=estimate.confidence,
         )
 
 
@@ -210,5 +275,4 @@ SIGNAL_AGENT_CLASSES: list[type[SignalAgent]] = [
     SocialTrendAgent,
     MacroAgent,
     LocalEventsAgent,
-    SeasonalityAgent,
 ]

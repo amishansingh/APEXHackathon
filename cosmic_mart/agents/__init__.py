@@ -1,7 +1,10 @@
 from .base import SignalAgent, SignalEstimate
 from .financial import FinancialReportAgent
 from .human_gate import HumanGate
+from .item_synthesizer import ItemSynthesizer
 from .overstock import OverstockLossAgent
+from .p1 import SeasonalPeaksAgent, SupplierLeadTimesAgent, YoYSalesAgent
+from .p2 import InboundShipmentsAgent, RealtimeStockAgent, SellthroughVelocityAgent
 from .proposals import build_proposals
 from .signals import (
     SIGNAL_AGENT_CLASSES,
@@ -35,4 +38,11 @@ __all__ = [
     "FinancialReportAgent",
     "TradeoffDecisionAgent",
     "HumanGate",
+    "ItemSynthesizer",
+    "YoYSalesAgent",
+    "SeasonalPeaksAgent",
+    "SupplierLeadTimesAgent",
+    "RealtimeStockAgent",
+    "InboundShipmentsAgent",
+    "SellthroughVelocityAgent",
 ]
