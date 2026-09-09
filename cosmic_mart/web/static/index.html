@@ -3,309 +3,869 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Cosmic Mart · Supply Chain Agents</title>
+<title>Cosmic Mart · Inventory Monitor</title>
 <style>
   :root {
     --bg: #0c0c10; --panel: #14141b; --line: #262633;
     --text: #e8e8ef; --muted: #8b8ba0;
-    --signal: #2d5a8c; --demand: #1f6b52; --over: #7a2f24;
-    --sustain: #2f5c22; --fin: #3b2a7a; --trade: #7a5c15; --gate: #33333d;
     --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+    --blue: #6aa9e9;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { padding: 24px 28px 16px; border-bottom: 1px solid var(--line); }
-  h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
-  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  main { padding: 20px 28px 60px; max-width: 1500px; }
-  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 18px 0 24px; }
-  button { background: #2b6cb0; color: #fff; border: 0; border-radius: 6px;
-    padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    font: 14px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  header { padding: 30px 34px 22px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 25px; font-weight: 650; letter-spacing: .1px; }
+  header .sub { color: var(--muted); font-size: 14.5px; margin-top: 7px; max-width: 820px; }
+
+  main { padding: 26px 34px 90px; max-width: 1500px; margin: 0 auto; }
+
+  /* ---- Controls ---- */
+  .controls { display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+    margin: 0 0 34px; padding: 16px 18px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; }
+  button { background: #2b6cb0; color: #fff; border: 0; border-radius: 7px;
+    padding: 11px 22px; font-size: 14.5px; font-weight: 650; cursor: pointer; }
+  button:hover:not(:disabled) { background: #3781cd; }
   button:disabled { opacity: .45; cursor: not-allowed; }
-  label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
-  input[type=number] { width: 64px; background: var(--panel); color: var(--text);
-    border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; }
+  label { color: var(--muted); font-size: 13.5px; display: flex; gap: 8px; align-items: center; }
+  input[type=number] { width: 66px; background: #0f0f15; color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 13.5px; }
+  #status { color: var(--muted); font-size: 13.5px; }
 
-  .layers { display: grid; gap: 14px; margin-bottom: 26px; }
-  .layer { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--panel); }
-  .layer h3 { margin: 0 0 10px; font-size: 11px; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--muted); font-weight: 600; }
-  .nodes { display: flex; gap: 10px; flex-wrap: wrap; }
-  .node { border: 1px solid var(--line); border-radius: 6px; padding: 9px 13px;
-    min-width: 150px; transition: border-color .25s, box-shadow .25s, opacity .25s; opacity: .55; }
-  .node.active { opacity: 1; border-color: currentColor; box-shadow: 0 0 0 1px currentColor inset; }
-  .node .n { font-weight: 600; font-size: 13px; }
-  .node .m { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
-  .s-signal { color: #7ab5ec; background: color-mix(in srgb, var(--signal) 28%, transparent); }
-  .s-demand { color: #6fdcb0; background: color-mix(in srgb, var(--demand) 28%, transparent); }
-  .s-over   { color: #f0928a; background: color-mix(in srgb, var(--over) 28%, transparent); }
-  .s-sustain{ color: #a3d977; background: color-mix(in srgb, var(--sustain) 28%, transparent); }
-  .s-fin    { color: #a99cf5; background: color-mix(in srgb, var(--fin) 28%, transparent); }
-  .s-trade  { color: #e8c05a; background: color-mix(in srgb, var(--trade) 28%, transparent); }
-  .s-gate   { color: #b8b8c8; background: color-mix(in srgb, var(--gate) 40%, transparent); }
+  /* ---- Progress steps ---- */
+  .steps { display: flex; align-items: stretch; flex-wrap: wrap; gap: 6px; margin-bottom: 38px; }
+  .step { flex: 1 1 200px; min-width: 190px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; padding: 14px 15px;
+    opacity: .42; transition: opacity .35s, border-color .35s, box-shadow .35s; }
+  .step.active { opacity: 1; border-color: var(--blue);
+    box-shadow: 0 0 0 1px rgba(106,169,233,.35), 0 0 22px rgba(106,169,233,.16); }
+  .step.done { opacity: 1; border-color: rgba(74,222,128,.5);
+    box-shadow: 0 0 0 1px rgba(74,222,128,.18); }
+  .step .st-top { display: flex; align-items: center; gap: 8px; }
+  .step .st-icon { font-size: 19px; line-height: 1; }
+  .step .st-title { font-weight: 650; font-size: 14px; }
+  .step .st-tick { margin-left: auto; color: var(--green); font-weight: 700; font-size: 15px;
+    opacity: 0; transition: opacity .3s; }
+  .step.done .st-tick { opacity: 1; }
+  .step .st-note { color: var(--muted); font-size: 12.5px; margin-top: 7px; line-height: 1.45; }
+  .arrow { display: flex; align-items: center; color: var(--line); font-size: 17px;
+    padding: 0 2px; flex: 0 0 auto; }
+  @media (max-width: 1150px) { .arrow { display: none; } }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px; margin-bottom: 24px; }
-  .card { background: var(--panel); border: 1px solid var(--line);
-    border-radius: 8px; padding: 14px 16px; }
-  .card .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-  .card .v { font-size: 24px; font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  /* ---- Headline banner ---- */
+  #headline { display: none; margin-bottom: 30px; padding: 22px 26px;
+    background: linear-gradient(90deg, rgba(43,108,176,.20), rgba(43,108,176,.05));
+    border: 1px solid rgba(106,169,233,.35); border-left: 4px solid var(--blue);
+    border-radius: 10px; font-size: 18px; line-height: 1.55; font-weight: 500; }
 
-  section { margin-bottom: 26px; }
-  section > h2 { font-size: 14px; margin: 0 0 10px; letter-spacing: .04em; }
-  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
-  table { width: 100%; border-collapse: collapse; background: var(--panel); font-size: 13px; }
-  th { text-align: left; padding: 9px 12px; color: var(--muted); font-weight: 600;
-    font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
-    border-bottom: 1px solid var(--line); white-space: nowrap; }
-  td { padding: 9px 12px; border-bottom: 1px solid #1d1d26; vertical-align: top; }
+  /* ---- Summary tiles ---- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px; margin-bottom: 40px; }
+  .tile { background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; }
+  .tile .t-k { color: var(--muted); font-size: 13px; line-height: 1.4; }
+  .tile .t-v { font-size: 30px; font-weight: 650; margin-top: 10px;
+    font-variant-numeric: tabular-nums; }
+  .tile .t-s { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+
+  /* ---- Sections ---- */
+  section { margin-bottom: 46px; }
+  section > h2 { font-size: 21px; font-weight: 650; margin: 0 0 5px; letter-spacing: .1px; }
+  section > .s-sub { color: var(--muted); font-size: 13.5px; margin: 0 0 18px; max-width: 780px; }
+
+  /* ---- Generic card grid ---- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .box { background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; }
+  .box .b-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .box .b-icon { font-size: 18px; }
+  .box .b-name { font-weight: 650; font-size: 14.5px; }
+  .box .b-line { font-size: 14px; line-height: 1.55; }
+  .box .b-meta { color: var(--muted); font-size: 12.5px; margin-top: 10px;
+    border-top: 1px solid var(--line); padding-top: 10px; }
+  .box .b-row { margin-top: 8px; font-size: 13.5px; }
+  .box .b-row b { font-weight: 600; }
+  .b-label { color: var(--muted); }
+
+  /* ---- Table ---- */
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); font-size: 13.5px; }
+  th { text-align: left; padding: 13px 16px; color: var(--muted); font-weight: 600;
+    font-size: 12.5px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 14px 16px; border-bottom: 1px solid #1d1d26; vertical-align: top; }
   tr:last-child td { border-bottom: 0; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px;
-    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-  .approve { background: rgba(74,222,128,.15); color: var(--green); }
-  .flag { background: rgba(251,191,36,.15); color: var(--amber); }
-  .block { background: rgba(248,113,113,.15); color: var(--red); }
+  .sub-t { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .strong { font-weight: 650; }
+  .empty { padding: 22px 16px; color: var(--muted); }
+
+  /* ---- Pills ---- */
+  .pill { display: inline-block; padding: 4px 11px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 650; white-space: nowrap; }
+  .p-green { background: rgba(74,222,128,.14); color: var(--green); }
+  .p-amber { background: rgba(251,191,36,.14); color: var(--amber); }
+  .p-red   { background: rgba(248,113,113,.14); color: var(--red); }
+  .p-grey  { background: rgba(139,139,160,.14); color: var(--muted); }
+  .c-green { color: var(--green); } .c-amber { color: var(--amber); } .c-red { color: var(--red); }
   .muted { color: var(--muted); }
-  #log { background: #08080b; border: 1px solid var(--line); border-radius: 8px;
-    padding: 10px 12px; height: 170px; overflow-y: auto;
-    font: 12px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--muted); }
-  #log .ev { color: #7ab5ec; }
-  .empty { padding: 16px; color: var(--muted); }
+
+  /* ---- Suggestion cards ---- */
+  .sugg { border-left: 3px solid var(--line); }
+  .sugg.v-approve { border-left-color: var(--green); }
+  .sugg.v-flag { border-left-color: var(--amber); }
+  .sugg h4 { margin: 12px 0 0; font-size: 15.5px; font-weight: 650; line-height: 1.45; }
+
+  /* ---- Decision cards ---- */
+  .decide { border-left: 3px solid var(--amber); }
+
+  /* ---- Blocked (understated) ---- */
+  #blocked-section { opacity: .78; }
+  #blocked-section > h2 { font-size: 17px; }
+  .blocked-item { background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 15px; font-size: 13px; color: var(--muted); }
+  .blocked-item .bi-title { color: var(--text); font-weight: 600; margin-bottom: 3px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Cosmic Mart · Multi-Agent Supply Chain</h1>
-  <div class="sub">Demand forecasting · Overstock detection · Sustainability arbitrage · Financial tradeoff</div>
+  <h1>Cosmic Mart · Inventory Monitor</h1>
+  <div class="sub">Watches the world for anything that changes what customers will buy — then tells you what to do about it</div>
 </header>
 
 <main>
   <div class="controls">
-    <button id="go">Run pipeline</button>
-    <label>SKU/market pairs <input type="number" id="limit" value="6" min="1" max="60" /></label>
-    <label><input type="checkbox" id="offline" /> Offline (no API calls)</label>
-    <span id="status" class="muted"></span>
+    <button id="go">Check my inventory</button>
+    <label>How many product-country pairs to check
+      <input type="number" id="limit" value="6" min="1" max="60" /></label>
+    <label><input type="checkbox" id="offline" /> Practice mode (no AI calls)</label>
+    <span id="status"></span>
   </div>
 
-  <div class="layers" id="layers"></div>
+  <div class="steps" id="steps"></div>
 
-  <div class="cards" id="cards"></div>
+  <div id="headline"></div>
 
-  <section>
-    <h2>Agent activity</h2>
-    <div id="log"></div>
+  <div class="tiles" id="tiles"></div>
+
+  <section id="world-section" style="display:none">
+    <h2>What we spotted in the world</h2>
+    <p class="s-sub">Events happening right now that could change how much your customers buy.</p>
+    <div class="grid" id="world"></div>
   </section>
 
-  <section>
-    <h2>Demand forecasts</h2>
-    <div class="scroll"><table id="demand">
-      <thead><tr><th>SKU @ Market</th><th class="num">Baseline</th><th class="num">Range</th>
-      <th class="num">Confidence</th><th>Conflicting signals</th><th>Reasoning</th></tr></thead>
-      <tbody><tr><td colspan="6" class="empty">Not run yet.</td></tr></tbody>
+  <section id="table-section">
+    <h2>How your products are doing</h2>
+    <p class="s-sub">One line per product in each country — what you have, how it is selling, what we expect, and what we suggest.</p>
+    <div class="scroll"><table>
+      <thead><tr>
+        <th>Product</th>
+        <th>Country</th>
+        <th>Stock right now</th>
+        <th>How it's selling</th>
+        <th>What we think you'll sell</th>
+        <th>Sitting idle</th>
+        <th>What to do</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">Press "Check my inventory" to start.</td></tr></tbody>
     </table></div>
   </section>
 
-  <section>
-    <h2>Overstock bleed list</h2>
-    <div class="scroll"><table id="bleed">
-      <thead><tr><th>SKU @ Market</th><th class="num">Excess</th><th class="num">Cover</th>
-      <th class="num">Capital/day</th><th class="num">Storage/day</th><th class="num">Depreciation/day</th>
-      <th class="num">Total/day</th><th>Severity</th></tr></thead>
-      <tbody><tr><td colspan="8" class="empty">Not run yet.</td></tr></tbody>
-    </table></div>
+  <section id="suggest-section" style="display:none">
+    <h2>What we suggest you do</h2>
+    <p class="s-sub">Each card is one concrete move, with what it saves and what it costs the planet.</p>
+    <div class="grid" id="suggestions"></div>
   </section>
 
-  <section>
-    <h2>Tradeoff decisions</h2>
-    <div class="scroll"><table id="decisions">
-      <thead><tr><th>ID</th><th>Action</th><th class="num">Net benefit</th><th class="num">Carbon</th>
-      <th class="num">Penalty</th><th class="num">Net score</th><th>Verdict</th><th>Reasoning</th></tr></thead>
-      <tbody><tr><td colspan="8" class="empty">Not run yet.</td></tr></tbody>
-    </table></div>
+  <section id="decide-section" style="display:none">
+    <h2>Needs your decision</h2>
+    <p class="s-sub">These are worth doing on the numbers, but a person should sign them off first.</p>
+    <div class="grid" id="decisions"></div>
   </section>
 
-  <section>
-    <h2>Human-in-the-loop gate</h2>
-    <div class="scroll"><table id="gate">
-      <thead><tr><th>ID</th><th>Owner</th><th>Verdict</th><th>Summary</th><th>Context</th></tr></thead>
-      <tbody><tr><td colspan="5" class="empty">Not run yet.</td></tr></tbody>
-    </table></div>
+  <section id="blocked-section" style="display:none">
+    <h2>We're not suggesting these</h2>
+    <p class="s-sub">We considered these moves and decided against them. Nothing for you to do here.</p>
+    <div class="grid" id="blocked"></div>
   </section>
 </main>
 
 <script>
-const LAYERS = [
-  { title: "Signal layer", cls: "s-signal", nodes: [
-    ["cultural_intelligence", "Cultural · daily"],
-    ["weather_climate", "Weather · hourly"],
-    ["social_trend_influencer", "Social · real-time"],
-    ["macroeconomic_signal", "Macro · weekly"],
-    ["local_events_news", "Local events · event-driven"],
-    ["seasonality_historical", "Seasonality · weekly"],
-  ]},
-  { title: "Demand synthesis + overstock", cls: "s-demand", nodes: [
-    ["demand", "Demand synthesizer"], ["overstock", "Overstock loss agent", "s-over"],
-  ]},
-  { title: "Parallel evaluation", cls: "s-sustain", nodes: [
-    ["sustainability", "Sustainability agent"], ["financial", "Financial report agent", "s-fin"],
-  ]},
-  { title: "Tradeoff decision", cls: "s-trade", nodes: [["decision", "Tradeoff decision agent"]] },
-  { title: "Human gate", cls: "s-gate", nodes: [["complete", "CFO / CSO final approval"]] },
+/* ============================================================
+   1. HELPERS — every one defined before any code that runs
+   ============================================================ */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const num = (n) => Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : "—";
+const money = (n) => Number.isFinite(Number(n)) ? "$" + Math.round(Number(n)).toLocaleString() : "—";
+
+const CATEGORY_NAMES = {
+  gadgets: "Electronics",
+  appliances: "Home Appliances",
+  home: "Home & Living",
+};
+function categoryName(c) {
+  if (!c) return "";
+  return CATEGORY_NAMES[c] || c;
+}
+
+const MONITORS = {
+  cultural_intelligence:   { icon: "🗓️", name: "Holiday calendar" },
+  weather_climate:         { icon: "⛅", name: "Weather watch" },
+  social_trend_influencer: { icon: "📱", name: "Social media" },
+  macroeconomic_signal:    { icon: "📊", name: "Economy tracker" },
+  local_events_news:       { icon: "📰", name: "Local news" },
+};
+function monitor(id) {
+  return MONITORS[id] || { icon: "🌍", name: String(id || "World watch").replace(/_/g, " ") };
+}
+
+const STOCK_STATUS = {
+  healthy:      { label: "Well stocked", cls: "p-green" },
+  low:          { label: "Running low",  cls: "p-amber" },
+  critical:     { label: "Nearly out",   cls: "p-red" },
+  out_of_stock: { label: "Out of stock", cls: "p-red" },
+};
+function stockStatus(s) {
+  return STOCK_STATUS[s] || { label: "Unknown", cls: "p-grey" };
+}
+
+const TRENDS = { rising: "↑ Growing", stable: "→ Steady", declining: "↓ Shrinking" };
+function trendLabel(t) { return TRENDS[t] || ""; }
+
+function confidenceLabel(c) {
+  const v = Number(c);
+  if (!Number.isFinite(v)) return "";
+  if (v >= 0.65) return "High confidence";
+  if (v >= 0.45) return "Moderate confidence";
+  return "Low confidence";
+}
+
+function envCost(score) {
+  const v = Number(score);
+  if (!Number.isFinite(v)) return { label: "Unknown", cls: "c-amber" };
+  if (v < 30) return { label: "Light", cls: "c-green" };
+  if (v < 60) return { label: "Moderate", cls: "c-amber" };
+  return { label: "Heavy", cls: "c-red" };
+}
+
+const VERDICTS = {
+  approve: { label: "Go ahead",      cls: "p-green" },
+  flag:    { label: "Your call",     cls: "p-amber" },
+  block:   { label: "Don't do this", cls: "p-red" },
+};
+function verdictInfo(v) { return VERDICTS[v] || { label: "—", cls: "p-grey" }; }
+
+const ACTION_VERBS = {
+  transfer: "Move stock",
+  discount: "Run a sale",
+  hold: "Leave it alone",
+  reorder: "Order more",
+  supplier_switch: "Change supplier",
+};
+function actionLabel(a) { return ACTION_VERBS[a] || String(a || "").replace(/_/g, " "); }
+
+const REVIEWERS = {
+  CFO: "Rowan Ortega (Finance)",
+  CSO: "Finley Martin (Sustainability)",
+};
+function reviewerName(r) {
+  if (!r || r === "none") return "";
+  return REVIEWERS[r] || r;
+}
+
+/* ---- Catalogue lookups (filled on page load) ---- */
+const skuById = {};
+const marketByCode = {};
+function skuName(id) { const s = skuById[id]; return (s && s.name) || id || "—"; }
+function skuCategory(id) { const s = skuById[id]; return s ? categoryName(s.category) : ""; }
+function marketName(code) { const m = marketByCode[code]; return (m && m.name) || code || "—"; }
+/* "United States" reads as "the United States" inside a sentence. */
+function withThe(name) {
+  return /^(United|Netherlands|Philippines|Czech|Bahamas|Maldives)\b/.test(String(name)) ? "the " + name : name;
+}
+function countryPhrase(code) { return withThe(marketName(code)); }
+function cap(s) { return String(s).charAt(0).toUpperCase() + String(s).slice(1); }
+
+/* ---- Plain-English sentence for a world event ---- */
+function impactPhrase(multiplier) {
+  const m = Number(multiplier);
+  if (!Number.isFinite(m)) return "no big change expected";
+  const pct = Math.round(Math.abs(m - 1) * 100);
+  if (pct < 1) return "no big change expected";
+  if (m > 1) return "we think demand will rise about " + pct + "%";
+  return "we think demand will fall about " + pct + "%";
+}
+
+function prettyEventName(eventType) {
+  return String(eventType || "").replace(/_/g, " ").trim();
+}
+
+const WEATHER_WORDS = ["weather", "storm", "heat", "cold", "rain", "snow", "winter",
+  "summer", "autumn", "monsoon", "typhoon", "cyclone", "humid", "dry", "mild",
+  "warm", "frost", "bushfire", "sand"];
+
+function eventSentence(eventType, marketCode, multiplier, agentId) {
+  const country = countryPhrase(marketCode);
+  const raw = String(eventType || "").toLowerCase();
+  const impact = impactPhrase(multiplier);
+  let lead;
+  if (!raw || raw === "no_event") return null;
+  if (raw.includes("election")) {
+    lead = "A general election is coming up in " + country;
+  } else if (raw.includes("recall")) {
+    lead = "A product recall is in the news in " + country;
+  } else if (raw.includes("viral") || raw.includes("social") || raw.includes("influencer")) {
+    lead = "Social media buzz picked up in " + country;
+  } else if (raw.includes("macro") || raw.includes("inflation") || raw.includes("currency") || raw.includes("econom")) {
+    lead = "Economic conditions shifted in " + country;
+  } else if (agentId === "weather_climate" || WEATHER_WORDS.some(w => raw.includes(w))) {
+    const desc = prettyEventName(eventType);
+    lead = desc
+      ? "The weather in " + country + " is turning to " + desc
+      : "Unusual weather is affecting " + country;
+  } else {
+    lead = prettyEventName(eventType) + " is coming up in " + country;
+    lead = lead.charAt(0).toUpperCase() + lead.slice(1);
+  }
+  return lead + " — " + impact;
+}
+
+/* ---- Plain-English sentence for a proposed action ---- */
+function actionSentence(action) {
+  if (!action) return "";
+  const product = (action.target && action.target.sku && action.target.sku.name)
+    || skuName(action.target && action.target.sku && action.target.sku.id);
+  const origin = withThe((action.target && action.target.market && action.target.market.name)
+    || marketName(action.target && action.target.market && action.target.market.code));
+  const units = num(action.units);
+  switch (action.action) {
+    case "transfer":
+      return "Move " + units + " " + product + " from " + origin
+        + " to " + countryPhrase(action.destination_market);
+    case "discount":
+      return "Run a " + Math.round(action.discount_pct || 0) + "% sale on "
+        + product + " in " + origin;
+    case "reorder":
+      return "Order " + units + " more " + product + " for " + origin;
+    case "supplier_switch":
+      return "Change supplier for " + product + " in " + origin;
+    case "hold":
+      return "Leave " + product + " in " + origin + " alone for now";
+    default:
+      return actionLabel(action.action) + " — " + product + " in " + origin;
+  }
+}
+
+function actionReason(action) {
+  if (!action) return "";
+  const origin = withThe((action.target && action.target.market && action.target.market.name)
+    || marketName(action.target && action.target.market && action.target.market.code));
+  if (action.action === "transfer") {
+    return cap(origin) + " has more of these than it can sell, and "
+      + countryPhrase(action.destination_market) + " is selling through fast.";
+  }
+  if (action.action === "discount") {
+    return cap(origin) + " has far more of these than it will sell at full price.";
+  }
+  if (action.action === "reorder") {
+    return cap(origin) + " is running down its stock faster than new deliveries arrive.";
+  }
+  return "This is the best balance of cost and benefit we found for " + origin + ".";
+}
+
+function moneyPhrase(net) {
+  const v = Number(net);
+  if (!Number.isFinite(v)) return "No clear money impact";
+  if (v >= 0) return "Saves about " + money(v);
+  return "Costs about " + money(Math.abs(v));
+}
+
+function velocityPhrase(divergence) {
+  const d = Number(divergence);
+  if (!Number.isFinite(d)) return "";
+  if (d > 1.15) return "selling " + Math.round((d - 1) * 100) + "% faster than expected";
+  if (d < 0.85) return "selling " + Math.round((1 - d) * 100) + "% slower than expected";
+  return "selling as expected";
+}
+
+function blockedReason(reason) {
+  const raw = String(reason || "").toLowerCase();
+  if (raw.includes("carbon") || raw.includes("emission")) {
+    return "The environmental cost of this move outweighs what it would save.";
+  }
+  if (raw.includes("benefit") || raw.includes("cost") || raw.includes("negative") || raw.includes("net")) {
+    return "Moving this stock would cost more than leaving it where it is.";
+  }
+  if (raw.includes("confidence")) {
+    return "We are not confident enough in the forecast behind this to recommend it.";
+  }
+  return "On balance this would leave you worse off than doing nothing.";
+}
+
+function tensionSentence(item) {
+  const carbon = Number(item && item.carbon_score);
+  const benefit = Number(item && item.net_benefit_usd);
+  if (item && item.owner === "CSO") {
+    return "The money works out, but the environmental cost is high — someone needs to weigh those against each other.";
+  }
+  if (Number.isFinite(carbon) && carbon >= 55) {
+    return "The money works out, but the environmental cost is high — someone needs to weigh those against each other.";
+  }
+  if (Number.isFinite(benefit) && benefit <= 0) {
+    return "This does not clearly pay for itself, so it needs a judgement call.";
+  }
+  return "The forecast behind this isn't solid enough to act on automatically.";
+}
+
+/* ============================================================
+   2. PROGRESS STEPS
+   ============================================================ */
+const STEPS = [
+  ["🌍", "Watching the world",        "Checking news, weather, social media, holidays and the economy"],
+  ["📦", "Picking affected products", "Working out which items these events could change"],
+  ["📈", "Looking at past sales",     "What sold last year, seasonal patterns, how long deliveries take"],
+  ["🏭", "Checking the warehouse",    "Stock on hand, deliveries on the way, how fast it's selling"],
+  ["🔮", "Predicting demand",         "Combining everything into a forecast"],
+  ["✅", "Deciding what to do",       "Weighing the money saved against the environmental cost"],
 ];
 
-const nodeEls = {};
-const layersEl = document.getElementById("layers");
-for (const layer of LAYERS) {
-  const wrap = document.createElement("div");
-  wrap.className = "layer";
-  const h = document.createElement("h3");
-  h.textContent = layer.title;
-  wrap.appendChild(h);
-  const nodes = document.createElement("div");
-  nodes.className = "nodes";
-  for (const [key, label, cls] of layer.nodes) {
+function buildSteps() {
+  const host = $("steps");
+  host.innerHTML = "";
+  STEPS.forEach(([icon, title, note], i) => {
+    if (i > 0) {
+      const arrow = document.createElement("div");
+      arrow.className = "arrow";
+      arrow.textContent = "→";
+      host.appendChild(arrow);
+    }
     const el = document.createElement("div");
-    el.className = "node " + (cls || layer.cls);
-    el.innerHTML = `<div class="n">${label.split(" · ")[0]}</div>
-      <div class="m">${label.includes(" · ") ? label.split(" · ")[1] : ""}</div>`;
-    nodes.appendChild(el);
-    nodeEls[key] = el;
+    el.className = "step";
+    el.id = "step" + i;
+    el.innerHTML = '<div class="st-top"><span class="st-icon">' + icon + '</span>'
+      + '<span class="st-title">' + esc(title) + '</span>'
+      + '<span class="st-tick">✓</span></div>'
+      + '<div class="st-note">' + esc(note) + '</div>';
+    host.appendChild(el);
+  });
+}
+
+function stepActive(i) {
+  const el = $("step" + i);
+  if (el && !el.classList.contains("done")) el.classList.add("active");
+}
+function stepDone(i) {
+  const el = $("step" + i);
+  if (el) { el.classList.remove("active"); el.classList.add("done"); }
+}
+function resetSteps() {
+  STEPS.forEach((_, i) => {
+    const el = $("step" + i);
+    if (el) el.classList.remove("active", "done");
+  });
+}
+
+const STEP_MAP = {
+  signals:         { active: [0] },
+  p3_trigger:      { active: [0] },
+  item_synthesized:{ done: [0], active: [1] },
+  p1_result:       { done: [1], active: [2] },
+  p2_result:       { active: [3] },
+  demand:          { done: [2, 3], active: [4] },
+  decision:        { done: [4], active: [5] },
+  proposals:       { done: [4], active: [5] },
+  complete:        { done: [0, 1, 2, 3, 4, 5] },
+};
+
+function advanceSteps(event) {
+  const rule = STEP_MAP[event];
+  if (!rule) return;
+  (rule.done || []).forEach(stepDone);
+  (rule.active || []).forEach(stepActive);
+}
+
+/* ============================================================
+   3. LIVE STATE
+   ============================================================ */
+let rowState = {};        // "SKU@MKT" -> merged facts
+let worldEvents = [];     // p3 triggers seen this run
+let seenWorldKeys = {};
+
+function rowFor(key) {
+  if (!rowState[key]) {
+    const parts = String(key).split("@");
+    rowState[key] = { skuId: parts[0], marketCode: parts[1] };
   }
-  wrap.appendChild(nodes);
-  layersEl.appendChild(wrap);
+  return rowState[key];
 }
 
-const $ = (id) => document.getElementById(id);
-const money = (n) => "$" + Math.round(n).toLocaleString();
-const num = (n) => Math.round(n).toLocaleString();
-const esc = (s) => String(s ?? "").replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
-
-function activate(key) {
-  const el = nodeEls[key];
-  if (!el) return;
-  el.classList.add("active");
+function resetState() {
+  rowState = {};
+  worldEvents = [];
+  seenWorldKeys = {};
 }
 
-function log(event, data) {
-  const el = $("log");
-  const line = document.createElement("div");
-  line.innerHTML = `<span class="ev">${esc(event)}</span> ${esc(JSON.stringify(data))}`;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
+/* ============================================================
+   4. RENDERERS
+   ============================================================ */
+function renderWorld() {
+  const cards = worldEvents.map(t => {
+    const sentence = eventSentence(t.event_type, t.market, t.estimated_demand_impact, t.agent_id);
+    if (!sentence) return "";
+    const m = monitor(t.agent_id);
+    const cats = (t.affected_sku_categories || []).map(categoryName).filter(Boolean);
+    const conf = confidenceLabel(t.confidence_score);
+    return '<div class="box">'
+      + '<div class="b-head"><span class="b-icon">' + m.icon + '</span>'
+      + '<span class="b-name">' + esc(m.name) + '</span></div>'
+      + '<div class="b-line">' + esc(sentence) + '</div>'
+      + '<div class="b-meta">Affects: ' + esc(cats.length ? cats.join(", ") : "all product types")
+      + (conf ? ' · ' + esc(conf) : "") + '</div>'
+      + '</div>';
+  }).filter(Boolean);
+
+  $("world").innerHTML = cards.join("");
+  $("world-section").style.display = cards.length ? "" : "none";
 }
 
-function fill(tableId, rows, colspan) {
-  const body = document.querySelector(`#${tableId} tbody`);
-  body.innerHTML = rows.length
-    ? rows.join("")
-    : `<tr><td colspan="${colspan}" class="empty">Nothing to show.</td></tr>`;
+function renderRows() {
+  const keys = Object.keys(rowState);
+  const body = $("rows");
+  if (!keys.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">Working on it…</td></tr>';
+    return;
+  }
+  body.innerHTML = keys.map(key => {
+    const r = rowState[key];
+    const status = r.status ? stockStatus(r.status) : null;
+    const trend = trendLabel(r.trend);
+    const vel = velocityPhrase(r.divergence);
+    const conf = confidenceLabel(r.confidence);
+    const verdict = r.verdict ? verdictInfo(r.verdict) : null;
+
+    const stockCell = status
+      ? '<span class="pill ' + status.cls + '">' + esc(status.label) + '</span>'
+        + (r.daysOfSupply != null
+            ? '<div class="sub-t">' + esc(Math.round(r.daysOfSupply)) + ' days left</div>' : "")
+      : '<span class="muted">—</span>';
+
+    const sellCell = trend
+      ? '<div>' + esc(trend) + '</div>' + (vel ? '<div class="sub-t">' + esc(vel) + '</div>' : "")
+      : (vel ? '<div class="sub-t">' + esc(vel) + '</div>' : '<span class="muted">—</span>');
+
+    const forecastCell = (r.low != null && r.high != null)
+      ? '<div>' + num(r.low) + '–' + num(r.high) + ' units</div>'
+        + (conf ? '<div class="sub-t">' + esc(conf) + '</div>' : "")
+      : '<span class="muted">—</span>';
+
+    const idleCell = (r.excess > 0)
+      ? '<div>' + num(r.excess) + ' units</div>'
+        + '<div class="sub-t">' + money(r.dailyLoss) + ' a day</div>'
+      : '<span class="muted">—</span>';
+
+    const doCell = verdict
+      ? '<span class="pill ' + verdict.cls + '">' + esc(verdict.label) + '</span>'
+      : '<span class="muted">Nothing needed</span>';
+
+    const cat = r.category ? categoryName(r.category) : skuCategory(r.skuId);
+
+    return '<tr>'
+      + '<td><div class="strong">' + esc(r.skuName || skuName(r.skuId)) + '</div>'
+        + '<div class="sub-t">' + esc(cat) + '</div></td>'
+      + '<td>' + esc(r.marketName || marketName(r.marketCode)) + '</td>'
+      + '<td>' + stockCell + '</td>'
+      + '<td>' + sellCell + '</td>'
+      + '<td>' + forecastCell + '</td>'
+      + '<td>' + idleCell + '</td>'
+      + '<td>' + doCell + '</td>'
+      + '</tr>';
+  }).join("");
 }
 
-function render(payload) {
-  const run = payload.run;
-
-  $("cards").innerHTML = [
-    ["Pairs analysed", run.demand.length],
-    ["Actions evaluated", run.evaluated.length],
-    ["Approved", run.gate_queue.filter(g => g.verdict === "approve").length],
-    ["Flagged", run.gate_queue.filter(g => g.verdict === "flag").length],
-    ["Blocked", run.blocked.length],
-    ["Net benefit", money(payload.weekly_report.total_net_benefit_usd)],
-    ["Carbon credits", num(run.carbon_credits_kg) + " kg"],
-    ["LLM calls", payload.llm_calls],
-  ].map(([k, v]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
-
-  fill("demand", run.demand.map(d => `<tr>
-    <td>${esc(d.target.sku.id)}@${esc(d.target.market.code)}</td>
-    <td class="num">${num(d.baseline_units)}</td>
-    <td class="num">${num(d.forecast.units_low)}–${num(d.forecast.units_high)}</td>
-    <td class="num">${Math.round(d.forecast.confidence * 100)}%${d.escalate_to_human ? ' <span class="pill flag">escalate</span>' : ""}</td>
-    <td class="muted">${esc(d.forecast.conflicting_signals.join(", ") || "—")}</td>
-    <td class="muted">${esc(d.forecast.reasoning)}</td></tr>`), 6);
-
-  const bleed = run.overstock
+function renderHeadline(run) {
+  const pairs = (run.demand || []).length;
+  const needsYou = (run.evaluated || []).filter(e =>
+    e.decision && (e.decision.verdict === "flag" || e.decision.verdict === "block")).length;
+  const bleed = (run.overstock || [])
     .filter(a => a.units_excess > 0)
-    .sort((a, b) => (b.daily_loss.capital_tied_usd + b.daily_loss.storage_fees_usd + b.daily_loss.depreciation_usd)
-                  - (a.daily_loss.capital_tied_usd + a.daily_loss.storage_fees_usd + a.daily_loss.depreciation_usd));
-  fill("bleed", bleed.map(a => {
-    const l = a.daily_loss;
-    const total = l.capital_tied_usd + l.storage_fees_usd + l.depreciation_usd;
-    return `<tr>
-      <td>${esc(a.target.sku.id)}@${esc(a.target.market.code)}</td>
-      <td class="num">${num(a.units_excess)}</td>
-      <td class="num">${a.days_of_cover}d</td>
-      <td class="num">${money(l.capital_tied_usd)}</td>
-      <td class="num">${money(l.storage_fees_usd)}</td>
-      <td class="num">${money(l.depreciation_usd)}</td>
-      <td class="num"><strong>${money(total)}</strong></td>
-      <td>${esc(a.severity)}</td></tr>`;
-  }), 8);
+    .reduce((sum, a) => sum + (a.daily_loss.capital_tied_usd + a.daily_loss.storage_fees_usd
+      + a.daily_loss.depreciation_usd), 0);
+  const idleValue = (run.overstock || [])
+    .filter(a => a.units_excess > 0)
+    .reduce((sum, a) => {
+      const sku = skuById[a.target.sku.id];
+      const unitCost = sku ? sku.unit_cost_usd : (a.target.sku.unit_cost_usd || 0);
+      return sum + a.units_excess * unitCost;
+    }, 0);
 
-  fill("decisions", run.evaluated.map(e => `<tr>
-    <td>${esc(e.action.id)}</td>
-    <td>${esc(e.action.description)}</td>
-    <td class="num">${money(e.financial.net_benefit_usd)}</td>
-    <td class="num">${Math.round(e.carbon.score)}</td>
-    <td class="num">${money(e.decision.carbon_penalty_usd)}</td>
-    <td class="num">${money(e.decision.net_score)}</td>
-    <td><span class="pill ${esc(e.decision.verdict)}">${esc(e.decision.verdict)}</span></td>
-    <td class="muted">${esc(e.decision.reasoning)}</td></tr>`), 8);
+  let text = "We checked " + pairs + " product-country pair" + (pairs === 1 ? "" : "s") + ". ";
+  text += needsYou > 0
+    ? needsYou + (needsYou === 1 ? " needs" : " need") + " your attention"
+    : "Nothing needs your attention right now";
+  if (idleValue > 0) {
+    text += ", and we found " + money(idleValue) + " of stock sitting idle";
+  }
+  text += ".";
+  if (bleed > 0) {
+    text += " That idle stock is costing you about " + money(bleed) + " every day it stays put.";
+  }
 
-  const gateRows = run.gate_queue.map(g => `<tr>
-    <td>${esc(g.action_id)}</td><td>${esc(g.owner)}</td>
-    <td><span class="pill ${esc(g.verdict)}">${esc(g.verdict)}</span></td>
-    <td>${esc(g.summary)}</td><td class="muted">${esc(g.context)}</td></tr>`);
-  const blockRows = run.blocked.map(b => `<tr>
-    <td>${esc(b.action_id)}</td><td class="muted">—</td>
-    <td><span class="pill block">blocked</span></td>
-    <td>${esc(b.target_key)} · ${esc(b.action)}</td>
-    <td class="muted">${esc(b.reason)}</td></tr>`);
-  fill("gate", gateRows.concat(blockRows), 5);
-
-  $("status").textContent = payload.briefing;
+  const el = $("headline");
+  el.textContent = text;
+  el.style.display = "";
 }
 
-$("go").addEventListener("click", () => {
+function renderTiles(run) {
+  const pairs = (run.demand || []).length;
+  const suggestions = (run.evaluated || []).filter(e =>
+    e.decision && (e.decision.verdict === "approve" || e.decision.verdict === "flag")).length;
+  const needDecision = (run.gate_queue || []).filter(g => g.verdict === "flag").length;
+  const bleed = (run.overstock || [])
+    .filter(a => a.units_excess > 0)
+    .reduce((sum, a) => sum + (a.daily_loss.capital_tied_usd + a.daily_loss.storage_fees_usd
+      + a.daily_loss.depreciation_usd), 0);
+  const nearlyOut = Object.values(rowState)
+    .filter(r => r.status === "critical" || r.status === "out_of_stock").length;
+
+  const tiles = [
+    ["Product-country pairs checked", String(pairs), "one product in one country"],
+    ["Things we suggest doing", String(suggestions), "moves worth making"],
+    ["Need your decision", String(needDecision), "a person must sign these off"],
+    ["Money bleeding per day", money(bleed), "cost of stock you can't sell"],
+    ["Products nearly out of stock", String(nearlyOut), "risk of losing sales"],
+  ];
+  $("tiles").innerHTML = tiles.map(([k, v, s]) =>
+    '<div class="tile"><div class="t-k">' + esc(k) + '</div>'
+    + '<div class="t-v">' + esc(v) + '</div>'
+    + '<div class="t-s">' + esc(s) + '</div></div>').join("");
+}
+
+function renderSuggestions(run) {
+  const items = (run.evaluated || []).filter(e =>
+    e.decision && (e.decision.verdict === "approve" || e.decision.verdict === "flag"));
+  const cards = items.map(e => {
+    const v = verdictInfo(e.decision.verdict);
+    const env = envCost(e.carbon && e.carbon.score);
+    const owner = reviewerName(e.decision.escalation_owner);
+    return '<div class="box sugg v-' + esc(e.decision.verdict) + '">'
+      + '<span class="pill ' + v.cls + '">' + esc(v.label) + '</span>'
+      + '<h4>' + esc(actionSentence(e.action)) + '</h4>'
+      + '<div class="b-row"><span class="b-label">Why:</span> ' + esc(actionReason(e.action)) + '</div>'
+      + '<div class="b-row"><span class="b-label">Money:</span> <b>'
+        + esc(moneyPhrase(e.financial && e.financial.net_benefit_usd)) + '</b></div>'
+      + '<div class="b-row"><span class="b-label">Environment:</span> <b class="' + env.cls + '">'
+        + esc(env.label) + '</b></div>'
+      + (e.decision.verdict === "flag" && owner
+          ? '<div class="b-meta">Needs a decision from ' + esc(owner) + '</div>' : "")
+      + '</div>';
+  });
+  $("suggestions").innerHTML = cards.join("");
+  $("suggest-section").style.display = cards.length ? "" : "none";
+}
+
+function renderDecisions(run) {
+  const flagged = (run.gate_queue || []).filter(g => g.verdict === "flag");
+  const actionById = {};
+  (run.evaluated || []).forEach(e => { actionById[e.action.id] = e.action; });
+
+  const cards = flagged.map(g => {
+    const act = actionById[g.action_id];
+    const headline = act ? actionSentence(act) : g.summary;
+    const owner = reviewerName(g.owner) || "someone on the leadership team";
+    return '<div class="box decide">'
+      + '<span class="pill p-amber">Your call</span>'
+      + '<h4>' + esc(headline) + '</h4>'
+      + '<div class="b-row"><span class="b-label">Who decides:</span> <b>' + esc(owner) + '</b></div>'
+      + '<div class="b-row">' + esc(tensionSentence(g)) + '</div>'
+      + '<div class="b-meta">' + esc(moneyPhrase(g.net_benefit_usd)) + ' · Environmental cost: '
+        + esc(envCost(g.carbon_score).label) + '</div>'
+      + '</div>';
+  });
+  $("decisions").innerHTML = cards.join("");
+  $("decide-section").style.display = cards.length ? "" : "none";
+}
+
+function renderBlocked(run) {
+  const actionById = {};
+  (run.evaluated || []).forEach(e => { actionById[e.action.id] = e.action; });
+  const cards = (run.blocked || []).map(b => {
+    const act = actionById[b.action_id];
+    const headline = act ? actionSentence(act)
+      : actionLabel(b.action) + " — " + skuName(String(b.target_key || "").split("@")[0])
+        + " in " + marketName(String(b.target_key || "").split("@")[1]);
+    return '<div class="blocked-item">'
+      + '<div class="bi-title">' + esc(headline) + '</div>'
+      + esc(blockedReason(b.reason))
+      + '</div>';
+  });
+  $("blocked").innerHTML = cards.join("");
+  $("blocked-section").style.display = cards.length ? "" : "none";
+}
+
+function renderFinal(payload) {
+  const run = payload.run || {};
+
+  // Rebuild rows authoritatively from the result.
+  const fresh = {};
+  (run.demand || []).forEach(d => {
+    const key = d.target.sku.id + "@" + d.target.market.code;
+    const prev = rowState[key] || {};
+    fresh[key] = Object.assign({}, prev, {
+      skuId: d.target.sku.id,
+      skuName: d.target.sku.name,
+      category: d.target.sku.category,
+      marketCode: d.target.market.code,
+      marketName: d.target.market.name,
+      low: d.forecast.units_low,
+      expected: d.forecast.units_expected,
+      high: d.forecast.units_high,
+      confidence: d.forecast.confidence,
+    });
+  });
+  Object.keys(rowState).forEach(k => { if (!fresh[k]) fresh[k] = rowState[k]; });
+  rowState = fresh;
+
+  (run.p2_outputs || []).forEach(p => {
+    const key = p.sku_id + "@" + p.market;
+    const r = rowFor(key);
+    const d = p.data || {};
+    if (d.status) r.status = d.status;
+    if (d.days_of_supply != null) r.daysOfSupply = d.days_of_supply;
+    if (d.divergence_ratio != null) r.divergence = d.divergence_ratio;
+  });
+  (run.p1_outputs || []).forEach(p => {
+    const key = p.sku_id + "@" + p.market;
+    const r = rowFor(key);
+    const d = p.data || {};
+    if (d.trend) r.trend = d.trend;
+  });
+  (run.overstock || []).forEach(a => {
+    const key = a.target.sku.id + "@" + a.target.market.code;
+    const r = rowFor(key);
+    r.excess = a.units_excess;
+    r.dailyLoss = a.daily_loss.capital_tied_usd + a.daily_loss.storage_fees_usd
+      + a.daily_loss.depreciation_usd;
+  });
+  (run.evaluated || []).forEach(e => {
+    const key = e.action.target.sku.id + "@" + e.action.target.market.code;
+    rowFor(key).verdict = e.decision.verdict;
+  });
+
+  worldEvents = (run.p3_triggers || []).slice();
+  renderWorld();
+  renderRows();
+  renderHeadline(run);
+  renderTiles(run);
+  renderSuggestions(run);
+  renderDecisions(run);
+  renderBlocked(run);
+}
+
+/* ============================================================
+   5. STREAM HANDLING
+   ============================================================ */
+function applyStreamEvent(event, data) {
+  if (event === "p3_trigger") {
+    const key = data.agent_id + "|" + data.market + "|" + data.event_type;
+    if (!seenWorldKeys[key]) { seenWorldKeys[key] = true; worldEvents.push(data); renderWorld(); }
+  } else if (event === "p1_result") {
+    const r = rowFor(data.sku_id + "@" + data.market);
+    const d = data.key_data || {};
+    if (d.trend) r.trend = d.trend;
+  } else if (event === "p2_result") {
+    const r = rowFor(data.sku_id + "@" + data.market);
+    const d = data.key_data || {};
+    if (d.status) r.status = d.status;
+    if (d.days_of_supply != null) r.daysOfSupply = d.days_of_supply;
+    if (d.divergence_ratio != null) r.divergence = d.divergence_ratio;
+  } else if (event === "demand") {
+    const r = rowFor(data.target);
+    r.low = data.low; r.expected = data.expected; r.high = data.high;
+    r.confidence = data.confidence;
+  } else if (event === "overstock") {
+    const r = rowFor(data.target);
+    r.excess = data.excess;
+    r.dailyLoss = data.daily_loss_usd;
+  } else if (event === "signals") {
+    rowFor(data.target);
+  }
+
+  if (["p1_result", "p2_result", "demand", "overstock", "signals"].includes(event)) {
+    renderRows();
+  }
+}
+
+function startRun() {
   const btn = $("go");
   btn.disabled = true;
-  $("log").innerHTML = "";
-  Object.values(nodeEls).forEach(el => el.classList.remove("active"));
-  $("status").textContent = "Running…";
+
+  resetState();
+  resetSteps();
+  $("headline").style.display = "none";
+  $("tiles").innerHTML = "";
+  $("world").innerHTML = "";
+  $("world-section").style.display = "none";
+  $("suggestions").innerHTML = "";
+  $("suggest-section").style.display = "none";
+  $("decisions").innerHTML = "";
+  $("decide-section").style.display = "none";
+  $("blocked").innerHTML = "";
+  $("blocked-section").style.display = "none";
+  $("rows").innerHTML = '<tr><td colspan="7" class="empty">Looking at the world and your warehouses…</td></tr>';
+  $("status").textContent = "Checking…";
 
   const limit = $("limit").value;
   const offline = $("offline").checked;
-  const source = new EventSource(`/api/run?limit=${limit}&offline=${offline}`);
+  const source = new EventSource("/api/run?limit=" + encodeURIComponent(limit) + "&offline=" + offline);
 
   source.onmessage = (msg) => {
-    const { event, data } = JSON.parse(msg.data);
+    let parsed;
+    try { parsed = JSON.parse(msg.data); } catch (err) { return; }
+    const event = parsed.event, data = parsed.data || {};
+
     if (event === "result") {
-      render(data);
+      advanceSteps("complete");
+      renderFinal(data);
+      $("status").textContent = "Done — everything below is up to date.";
       source.close();
       btn.disabled = false;
       return;
     }
     if (event === "error") {
-      $("status").textContent = "Error: " + data.message;
+      $("status").textContent = "Something went wrong: " + (data.message || "unknown problem");
       source.close();
       btn.disabled = false;
       return;
     }
-    if (event === "signals") {
-      data.readings.forEach(r => activate(r.agent));
-    } else {
-      activate(event);
-    }
-    if (event !== "signals") log(event, data);
+
+    advanceSteps(event);
+    applyStreamEvent(event, data);
   };
 
   source.onerror = () => {
     source.close();
     btn.disabled = false;
-    if (!$("status").textContent.startsWith("Error")) $("status").textContent = "Stream closed.";
+    const s = $("status").textContent;
+    if (!s.startsWith("Something went wrong") && !s.startsWith("Done")) {
+      $("status").textContent = "The connection closed before we finished. Try again.";
+    }
   };
-});
+}
+
+/* ============================================================
+   6. BOOT
+   ============================================================ */
+buildSteps();
+$("go").addEventListener("click", startRun);
+
+fetch("/api/catalogue")
+  .then(r => r.json())
+  .then(cat => {
+    (cat.skus || []).forEach(s => { skuById[s.id] = s; });
+    (cat.markets || []).forEach(m => { marketByCode[m.code] = m; });
+  })
+  .catch(() => { /* fall back to raw codes */ });
 </script>
 </body>
 </html>
