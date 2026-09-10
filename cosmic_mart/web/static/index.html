@@ -700,6 +700,32 @@
   .p-red   { --dot: var(--rust); }
   .p-grey  { --dot: var(--midnight-soft); }
   .c-green { color: var(--sage);  font-style: italic; font-family: var(--serif); }
+  /* ---- Forecast range ----
+     Three bare numbers ("137 – 162 – 186") made the reader work out which was
+     which. The bar shows the span at a glance and puts the dot where the most
+     likely figure actually sits inside it — off-centre when the range was
+     widened, which is the whole point of widening it. */
+  .fc { margin: 8px 0 2px; }
+  .fc-track {
+    position: relative; height: 3px; margin: 9px 0 6px;
+    background: var(--midnight-web); border-radius: 2px;
+  }
+  .fc-fill { position: absolute; inset: 0; border-radius: 2px; background: var(--brass-hair); }
+  .fc-fill.wide { background: rgba(217,166,89,.5); }
+  .fc-dot {
+    position: absolute; top: 50%; width: 9px; height: 9px;
+    margin: -4.5px 0 0 -4.5px; border-radius: 50%;
+    background: var(--brass); box-shadow: 0 0 0 2px var(--parchment);
+  }
+  .fc-ends {
+    display: flex; justify-content: space-between;
+    font-family: var(--serif); font-style: italic;
+    font-size: 11.5px; color: var(--midnight-soft);
+  }
+  .fc-note {
+    margin-top: 7px; font-family: var(--serif); font-style: italic;
+    font-size: 12px; line-height: 1.5; color: var(--brass);
+  }
   .c-amber { color: var(--brass); font-style: italic; font-family: var(--serif); }
   .c-red   { color: var(--rust);  font-style: italic; font-family: var(--serif); }
   .muted   { color: var(--midnight-soft); font-family: var(--serif); font-style: italic; }
@@ -998,9 +1024,38 @@ function orderReason(rec) {
   return "Historical and live signals broadly agree near the baseline — no order needed this cycle.";
 }
 
+/* Compact one-line form, for dense table rows and the reasoning trail. */
 function rangePhrase(fr) {
   if (!fr) return "—";
-  return num(fr.units_low) + " – " + num(fr.units_expected) + " – " + num(fr.units_high) + " units";
+  return num(fr.units_expected) + " units most likely ("
+    + num(fr.units_low) + "–" + num(fr.units_high) + ")";
+}
+
+/* Full card form: a plain-language headline, a range bar, and — only when the
+   range was widened — one sentence on why it is wide. A reader with no
+   supply-chain background should not have to decode "137 – 162 – 186". */
+function forecastHtml(fr) {
+  if (!fr) return "";
+  const lo = Number(fr.units_low), ex = Number(fr.units_expected), hi = Number(fr.units_high);
+  if (![lo, ex, hi].every(Number.isFinite)) return "";
+
+  const span = Math.max(hi - lo, 1);
+  const pos = Math.min(100, Math.max(0, ((ex - lo) / span) * 100));
+
+  return '<div class="b-row"><span class="b-label">Forecast</span> <b>'
+      + esc(num(ex)) + ' units most likely</b></div>'
+    + '<div class="fc">'
+    +   '<div class="fc-track">'
+    +     '<div class="fc-fill' + (fr.widened ? ' wide' : '') + '"></div>'
+    +     '<div class="fc-dot" style="left:' + pos.toFixed(1) + '%"></div>'
+    +   '</div>'
+    +   '<div class="fc-ends"><span>could be as low as ' + esc(num(lo)) + '</span>'
+    +     '<span>or as high as ' + esc(num(hi)) + '</span></div>'
+    +   (fr.widened
+        ? '<div class="fc-note">Wide on purpose — past sales and live signals '
+          + 'disagree, so this spans both.</div>'
+        : '')
+    + '</div>';
 }
 
 /* ============================================================
@@ -1152,8 +1207,7 @@ function renderOrders(run) {
       + '<h4>' + esc(orderHeadline(rec)) + '</h4>'
       + conflictHtml(rec)
       + '<div class="b-row"><span class="b-label">Why</span> ' + esc(orderReason(rec)) + '</div>'
-      + '<div class="b-row"><span class="b-label">Forecast</span> <b>' + esc(rangePhrase(fr))
-        + (fr.widened ? ' · <span class="c-amber">widened</span>' : '') + '</b></div>'
+      + forecastHtml(fr)
       + '<div class="b-row"><span class="b-label">Confidence</span> <b>' + esc(confidenceLabel(rec.confidence))
         + ' (' + esc(pct(rec.confidence)) + ')</b></div>'
       + dataQualityHtml(rec)
@@ -1174,8 +1228,7 @@ function renderReviews(run) {
       + '<span class="pill ' + info.cls + '">' + esc(info.label) + '</span>'
       + '<h4>' + esc(orderHeadline(rec)) + '</h4>'
       + conflictHtml(rec)
-      + '<div class="b-row"><span class="b-label">Forecast</span> <b>' + esc(rangePhrase(fr))
-        + (fr.widened ? ' · <span class="c-amber">widened</span>' : '') + '</b></div>'
+      + forecastHtml(fr)
       + flagsHtml(rec)
       + dataQualityHtml(rec)
       + '<div class="b-meta">' + esc(cap(dec.action)) + ' — ' + esc(dec.modifier_notes || '') + '</div>';
@@ -1197,10 +1250,7 @@ function renderHeld(run) {
       + '<div class="bi-title">' + esc(orderHeadline(rec))
         + (contested ? ' <span class="c-amber">· contested</span>' : '') + '</div>'
       + esc(dec.modifier_notes || orderReason(rec))
-      + (contested
-          ? '<div class="b-row"><span class="b-label">Forecast</span> <b>' + esc(rangePhrase(fr))
-              + ' · <span class="c-amber">widened</span></b></div>' + conflictHtml(rec)
-          : '')
+      + (contested ? forecastHtml(fr) + conflictHtml(rec) : '')
       + dataQualityHtml(rec);
     return cardWithReasoning(base, rec.id, rec, run) + '</div>';
   });
@@ -1381,7 +1431,8 @@ function renderDrawerContent(stepIdx) {
       const fr = r.forecast_range || {};
       return "<tr>"
         + "<td><div class='d-main'>" + esc(r.sku.name) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(rangePhrase(fr)) + "</div><div class='d-sub'>stock units · low · expected · high</div></td>"
+        + "<td><div class='d-main'>" + esc(rangePhrase(fr)) + "</div><div class='d-sub'>units to stock"
+        + (fr.widened ? " · <span class='c-amber'>range widened, sources disagree</span>" : "") + "</div></td>"
         + "<td><div class='d-main'>" + esc(confidenceLabel(r.confidence)) + "</div><div class='d-sub'>" + esc(pct(r.confidence)) + "</div></td>"
         + "<td><div class='d-main'>" + (r.divergence_score != null ? Number(r.divergence_score).toFixed(1) + "σ" : "—") + "</div></td>"
         + "</tr>";
@@ -1635,8 +1686,18 @@ fetch("/api/catalogue")
   .then(cat => {
     (cat.skus || []).forEach(s => { skuById[s.id] = s; });
     (cat.markets || []).forEach(m => { marketByCode[m.code] = m; });
+
+    // Size Scope from the live catalogue rather than a hardcoded number. The
+    // default was left at 6 when the catalogue grew to 15, so an untouched run
+    // quietly surveyed less than half the shelf.
+    const count = (cat.skus || []).length;
+    const limitInput = $("limit");
+    if (count && limitInput) {
+      limitInput.max = count;
+      limitInput.value = count;
+    }
   })
-  .catch(() => { /* fall back to raw codes */ });
+  .catch(() => { /* fall back to raw codes and the markup default */ });
 </script>
 </body>
 </html>
