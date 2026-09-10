@@ -33,31 +33,35 @@ _PRIMARY_WAREHOUSE: dict[str, str] = {
 class OrderRecommendationAgent(Agent):
     name = "order_recommendation"
 
+    def decide_action(self, *, baseline: float, expected: int) -> tuple[str, int]:
+        """Pick the action and the quantity it commits.
+
+        Split out from `package` so the synthesizer can size its escalation
+        flags against the order actually being proposed. Valuing the forecast
+        instead flagged holds — which order nothing — as high-value orders.
+        """
+        if expected > baseline * 1.05:
+            return "reorder", expected
+        if expected < baseline * 0.95:
+            return "rebalance", max(0, round(baseline - expected))
+        return "hold", 0
+
     def package(
         self,
         *,
         sku: SKU,
-        baseline: float,
+        action: str,
+        quantity: int,
         forecast_range: ForecastRange,
         confidence: float,
         divergence: float,
         conflict_summary: str | None,
         escalation_flags: list[EscalationFlag],
+        data_quality_flags: list[str],
         hist_weight: float,
         sig_weight: float,
         reasoning: str,
     ) -> OrderRecommendation:
-        expected = forecast_range.units_expected
-        if expected > baseline * 1.05:
-            action = "reorder"
-            quantity = expected
-        elif expected < baseline * 0.95:
-            action = "rebalance"
-            quantity = max(0, round(baseline - expected))
-        else:
-            action = "hold"
-            quantity = 0
-
         supplier_pool = _SUPPLIERS.get(sku.category, ["General Supply Co."])
         supplier = supplier_pool[hash(sku.id) % len(supplier_pool)] if action == "reorder" else None
         warehouse = _PRIMARY_WAREHOUSE.get(sku.id, _WAREHOUSES["US"]) if action != "hold" else None
@@ -71,6 +75,7 @@ class OrderRecommendationAgent(Agent):
             forecast_range=forecast_range,
             confidence=round(confidence, 3),
             escalation_flags=escalation_flags,
+            data_quality_flags=list(data_quality_flags),
             conflict_summary=conflict_summary,
             divergence_score=round(divergence, 3),
             hist_weight=hist_weight,

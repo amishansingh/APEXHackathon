@@ -191,6 +191,9 @@ class OrderRecommendation(BaseModel):
     forecast_range: ForecastRange
     confidence: float = Field(ge=0.0, le=1.0)
     escalation_flags: list[EscalationFlag] = Field(default_factory=list)
+    # Carried through from the merged baseline so the reviewer sees the caveat
+    # on the recommendation itself, not only by opening the reasoning panel.
+    data_quality_flags: list[str] = Field(default_factory=list)
     conflict_summary: str | None = None
     divergence_score: float = 0.0
     hist_weight: float = 0.7

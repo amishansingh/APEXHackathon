@@ -939,6 +939,27 @@ const FLAG_LABELS = {
 };
 function flagLabel(f) { return FLAG_LABELS[f] || String(f || "").replace(/_/g, " "); }
 
+/* ---- Data-quality caveats ----
+   These are why a confidence score is lower than it looks. Shown on the card
+   itself: a number like 75% reads as reassuring, and the reader deserves to
+   know it was marked down for thin data rather than having to open the
+   reasoning panel to find out. */
+const DATA_QUALITY_LABELS = {
+  weak_analogue:    "Analogue markets are a weak match — the 25 yr comparison is less reliable here",
+  sparse_earth_data:"Thin North American sales history — the analogue weight carries more of this forecast",
+};
+function dataQualityLabel(f) {
+  return DATA_QUALITY_LABELS[f] || String(f || "").replace(/_/g, " ");
+}
+function dataQualityHtml(rec) {
+  const flags = rec.data_quality_flags || [];
+  if (!flags.length) return "";
+  return flags.map(f =>
+    "<div class='b-row'><span class='b-label'>Caveat</span> <span class='c-amber'>"
+    + esc(dataQualityLabel(f)) + "</span></div>"
+  ).join("");
+}
+
 function confidenceLabel(c) {
   const v = Number(c);
   if (!Number.isFinite(v)) return "";
@@ -1135,6 +1156,7 @@ function renderOrders(run) {
         + (fr.widened ? ' · <span class="c-amber">widened</span>' : '') + '</b></div>'
       + '<div class="b-row"><span class="b-label">Confidence</span> <b>' + esc(confidenceLabel(rec.confidence))
         + ' (' + esc(pct(rec.confidence)) + ')</b></div>'
+      + dataQualityHtml(rec)
       + (rec.supplier ? '<div class="b-meta">Supplier ' + esc(rec.supplier)
           + (rec.warehouse ? ' · Route ' + esc(rec.warehouse) : '') + '</div>' : '');
     return cardWithReasoning(base, rec.id, rec, run) + '</div>';
@@ -1155,6 +1177,7 @@ function renderReviews(run) {
       + '<div class="b-row"><span class="b-label">Forecast</span> <b>' + esc(rangePhrase(fr))
         + (fr.widened ? ' · <span class="c-amber">widened</span>' : '') + '</b></div>'
       + flagsHtml(rec)
+      + dataQualityHtml(rec)
       + '<div class="b-meta">' + esc(cap(dec.action)) + ' — ' + esc(dec.modifier_notes || '') + '</div>';
     return cardWithReasoning(base, rec.id, rec, run) + '</div>';
   });
@@ -1165,9 +1188,20 @@ function renderReviews(run) {
 function renderHeld(run) {
   const { held } = classifyRun(run);
   const cards = held.map(({ rec, dec }) => {
+    // A hold commits nothing, so it is not escalated — but a hold *caused by*
+    // disagreement is the tension this system exists to show. Keep it in the
+    // quiet pile, and still say why it is contested rather than burying it.
+    const fr = rec.forecast_range || {};
+    const contested = !!fr.widened;
     const base = '<div class="blocked-item">'
-      + '<div class="bi-title">' + esc(orderHeadline(rec)) + '</div>'
-      + esc(dec.modifier_notes || orderReason(rec));
+      + '<div class="bi-title">' + esc(orderHeadline(rec))
+        + (contested ? ' <span class="c-amber">· contested</span>' : '') + '</div>'
+      + esc(dec.modifier_notes || orderReason(rec))
+      + (contested
+          ? '<div class="b-row"><span class="b-label">Forecast</span> <b>' + esc(rangePhrase(fr))
+              + ' · <span class="c-amber">widened</span></b></div>' + conflictHtml(rec)
+          : '')
+      + dataQualityHtml(rec);
     return cardWithReasoning(base, rec.id, rec, run) + '</div>';
   });
   $("held").innerHTML = cards.join("");

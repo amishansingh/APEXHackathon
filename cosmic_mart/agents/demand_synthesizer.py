@@ -127,7 +127,14 @@ class DemandSynthesizer(Agent):
         )
 
         confidence = self._confidence(merged, conflict, divergence)
-        flags = self._escalation_flags(merged, expected, confidence, divergence)
+
+        # Decide the action first: escalation is sized against the order actually
+        # being proposed, not the raw forecast. A hold commits nothing and so
+        # cannot be a high-value order.
+        action, quantity = self.order_agent.decide_action(
+            baseline=baseline, expected=forecast_range.units_expected
+        )
+        flags = self._escalation_flags(merged, action, quantity, confidence, divergence)
 
         # §7.2 contract field. This is the only stage holding both the baseline
         # and the signals, so it is the only stage that can honestly set it.
@@ -172,12 +179,14 @@ class DemandSynthesizer(Agent):
 
         return self.order_agent.package(
             sku=merged.sku,
-            baseline=baseline,
+            action=action,
+            quantity=quantity,
             forecast_range=forecast_range,
             confidence=confidence,
             divergence=divergence,
             conflict_summary=narrative.conflict_summary or None,
             escalation_flags=flags,
+            data_quality_flags=merged.data_quality_flags,
             hist_weight=self.hist_weight,
             sig_weight=self.sig_weight,
             reasoning=narrative.reasoning,
@@ -234,15 +243,23 @@ class DemandSynthesizer(Agent):
         return max(0.05, min(1.0, confidence))
 
     def _escalation_flags(
-        self, merged: MergedBaseline, expected: float, confidence: float, divergence: float
+        self,
+        merged: MergedBaseline,
+        action: str,
+        quantity: int,
+        confidence: float,
+        divergence: float,
     ) -> list[EscalationFlag]:
         flags: list[EscalationFlag] = []
-        reorder_value = expected * merged.sku.unit_cost_usd
-        if reorder_value > SETTINGS.escalation_value_threshold_usd:
+        # Value the units actually committed. A hold moves nothing, so it never
+        # trips this — asking a reviewer to sign off on an order that is not
+        # being placed teaches them to wave the queue through.
+        order_value = quantity * merged.sku.unit_cost_usd
+        if order_value > SETTINGS.escalation_value_threshold_usd:
             flags.append(
                 EscalationFlag(
                     flag_type="high_value",
-                    reason=f"Reorder value ${reorder_value:,.0f} exceeds "
+                    reason=f"{action.capitalize()} value ${order_value:,.0f} exceeds "
                     f"${SETTINGS.escalation_value_threshold_usd:,.0f} threshold",
                 )
             )
