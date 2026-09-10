@@ -128,6 +128,18 @@ class SignalProcessingAgent(Agent):
                     description=entry["headline"],
                 )
             )
+        # SKU-specific signal — treat as "news" (most specific, item-level intelligence).
+        sku_entry = raw.get("sku_specific")
+        if sku_entry:
+            signals.append(
+                SignalItem(
+                    type="news",
+                    source="sku_specific",
+                    strength=float(sku_entry["strength"]),
+                    direction=sku_entry["direction"],
+                    description=sku_entry["headline"],
+                )
+            )
         return signals
 
     def _dedupe(self, signals: list[SignalItem]) -> list[SignalItem]:

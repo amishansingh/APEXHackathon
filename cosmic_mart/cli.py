@@ -63,7 +63,7 @@ def list_markets() -> None:
 
 @app.command("run")
 def run(
-    limit: int = typer.Option(6, help="How many SKUs to process."),
+    limit: int = typer.Option(15, help="How many SKUs to process."),
     sku: str = typer.Option(None, help="Restrict to one SKU id, e.g. GAD-1001."),
     offline: bool = typer.Option(
         False, "--offline", help="Run deterministically with no API calls."

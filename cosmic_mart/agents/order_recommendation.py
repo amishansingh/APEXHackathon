@@ -10,16 +10,23 @@ from __future__ import annotations
 from ..models import EscalationFlag, ForecastRange, OrderRecommendation, SKU
 from .base import Agent
 
-_SUPPLIERS = {
-    "gadgets": "Helios Components",
-    "appliances": "Meridian Assembly",
-    "home": "Terra Goods Co.",
+_SUPPLIERS: dict[str, list[str]] = {
+    "gadgets":    ["Helios Components", "Apex Electronics Ltd.", "NovaTech Supply Chain"],
+    "appliances": ["Meridian Assembly", "Cardinal HVAC Group",   "Solaris Manufacturing"],
+    "home":       ["Terra Goods Co.",   "Hestia Home Supply",    "Crestwood Imports"],
 }
 _WAREHOUSES = {
     "US": "Dallas-DC1",
     "CA": "Toronto-DC2",
     "MX": "Monterrey-DC3",
     "NA": "Denver-DC4",
+}
+# SKUs with a primary warehouse other than Dallas-DC1 (US default).
+_PRIMARY_WAREHOUSE: dict[str, str] = {
+    "APP-2002": "Toronto-DC2",   # heater: Canada primary
+    "APP-2003": "Toronto-DC2",   # chest freezer: cold-climate primary
+    "GAD-1002": "Dallas-DC1",
+    "HOM-3002": "Dallas-DC1",
 }
 
 
@@ -51,8 +58,9 @@ class OrderRecommendationAgent(Agent):
             action = "hold"
             quantity = 0
 
-        supplier = _SUPPLIERS.get(sku.category) if action == "reorder" else None
-        warehouse = _WAREHOUSES["US"] if action != "hold" else None
+        supplier_pool = _SUPPLIERS.get(sku.category, ["General Supply Co."])
+        supplier = supplier_pool[hash(sku.id) % len(supplier_pool)] if action == "reorder" else None
+        warehouse = _PRIMARY_WAREHOUSE.get(sku.id, _WAREHOUSES["US"]) if action != "hold" else None
 
         return OrderRecommendation(
             sku=sku,
