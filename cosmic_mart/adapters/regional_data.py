@@ -10,6 +10,7 @@ from ..models import SKU
 ANALOGUE_REGIONS = [
     "Kepler-Belt", "Titan-Ring", "Ceres-Hub", "Europa-Shelf", "Vesta-Cluster",
     "Io-Terminus", "Ganymede-Reach", "Callisto-Verge", "Enceladus-Bay", "Mimas-Fold",
+    "Rhea-Corridor", "Dione-Passage", "Tethys-Haven", "Oberon-Flats", "Ariel-Drift",
 ]
 
 
@@ -33,5 +34,5 @@ class RegionalDataProvider:
             "years_of_history": 25,
             "monthly_units": round(monthly, 1),
             "by_region": by_region,
-            "structural_similarity": round(rng.uniform(0.55, 0.92), 2),
+            "structural_similarity": round(rng.uniform(0.45, 0.95), 2),
         }

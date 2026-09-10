@@ -1272,15 +1272,18 @@ function drawerTable(cols, tbody, extra) {
     + "</tr></thead><tbody>" + tbody + "</tbody></table></div>" + (extra || "");
 }
 
+const SIG_CATEGORY = { promo: "Promo", large_event: "Event", news: "News" };
+const PULL_SYMBOL = { up: "↑", down: "↓", neutral: "→" };
+
 function signalsCell(ctx) {
   const sigs = (ctx.signals || []);
   if (!sigs.length) return "<span class='muted'>quiet</span>";
-  return sigs.map(s => {
-    const t = signalType(s.type);
+  return "<div style='min-width:260px;white-space:normal'>" + sigs.map(s => {
+    const cat = SIG_CATEGORY[s.type] || s.type;
     const dir = directionInfo(s.direction);
-    return "<div class='d-sub'>" + t.name + " · " + esc(s.description || "")
+    return "<div class='d-sub'><strong>" + esc(cat) + "</strong> · " + esc(s.description || "")
       + " (<span class='" + dir.cls + "'>" + dir.label + "</span>)</div>";
-  }).join("");
+  }).join("") + "</div>";
 }
 
 function renderDrawerContent(stepIdx) {
@@ -1308,16 +1311,13 @@ function renderDrawerContent(stepIdx) {
         + (histMeta.items != null ? histMeta.items + " items merged · " : "")
         + "Earth 0.9 · analogues 0.1</div>"
       : "";
-    const cols = ["Product", "Earth", "Regional", "Weighted baseline", "Data quality"];
+    const cols = ["Product", "Earth", "Regional", "Weighted baseline"];
     const tbody = rows.map(b => {
-      const flags = (b.data_quality_flags || []).join(", ")
-        || "<span class='c-green'>clean</span>";
       return "<tr>"
         + "<td><div class='d-main'>" + esc(b.sku.name) + "</div><div class='d-sub'>" + esc(categoryName(b.sku.category)) + "</div></td>"
-        + "<td><div class='d-main'>" + num(b.earth_baseline) + "</div></td>"
-        + "<td><div class='d-main'>" + num(b.regional_baseline) + "</div></td>"
-        + "<td><div class='d-main'>" + num(b.weighted_baseline) + " units</div></td>"
-        + "<td><div class='d-sub'>" + flags + "</div></td>"
+        + "<td><div class='d-main'>" + num(b.earth_baseline) + "</div><div class='d-sub'>stock units / mo</div></td>"
+        + "<td><div class='d-main'>" + num(b.regional_baseline) + "</div><div class='d-sub'>stock units / mo</div></td>"
+        + "<td><div class='d-main'>" + num(b.weighted_baseline) + " units</div><div class='d-sub'>stock units / mo</div></td>"
         + "</tr>";
     }).join("");
     return meta + drawerTable(cols, tbody);
@@ -1335,20 +1335,19 @@ function renderDrawerContent(stepIdx) {
       return "<tr>"
         + "<td><div class='d-main'>" + esc(ctx.sku.name) + "</div></td>"
         + "<td>" + signalsCell(ctx) + "</td>"
-        + "<td><div class='d-main " + dir.cls + "'>" + esc(cap(ctx.net_direction)) + "</div><div class='d-sub'>" + dir.label + conflict + "</div></td>"
+        + "<td><div class='d-main " + dir.cls + "' style='font-size:1.4rem'>" + (PULL_SYMBOL[ctx.net_direction] || "→") + "</div><div class='d-sub'>" + dir.label + conflict + "</div></td>"
         + "</tr>";
     }).join("");
     return meta + drawerTable(cols, tbody);
   }
 
   if (stepIdx === 3) { // Synthesizer — forecasts
-    const cols = ["Product", "Forecast range", "Widened", "Confidence", "Divergence"];
+    const cols = ["Product", "Forecast range", "Confidence", "Divergence"];
     const tbody = rows.map(r => {
       const fr = r.forecast_range || {};
       return "<tr>"
         + "<td><div class='d-main'>" + esc(r.sku.name) + "</div></td>"
-        + "<td><div class='d-main'>" + esc(rangePhrase(fr)) + "</div><div class='d-sub'>low · expected · high</div></td>"
-        + "<td>" + (fr.widened ? "<span class='pill p-amber'>Widened</span>" : "<span class='muted'>no</span>") + "</td>"
+        + "<td><div class='d-main'>" + esc(rangePhrase(fr)) + "</div><div class='d-sub'>stock units · low · expected · high</div></td>"
         + "<td><div class='d-main'>" + esc(confidenceLabel(r.confidence)) + "</div><div class='d-sub'>" + esc(pct(r.confidence)) + "</div></td>"
         + "<td><div class='d-main'>" + (r.divergence_score != null ? Number(r.divergence_score).toFixed(1) + "σ" : "—") + "</div></td>"
         + "</tr>";
@@ -1436,9 +1435,10 @@ function buildReasoningChain(rec, run) {
     const sigs = signals.signals || [];
     if (sigs.length) {
       sigs.forEach(s => {
-        html += rr(signalType(s.type).name,
+        const catLabel = SIG_CATEGORY[s.type] || s.type;
+        html += rr(catLabel,
           (s.description || "signal") + " · " + directionInfo(s.direction).label
-          + " (strength " + Number(s.strength).toFixed(2) + ")"
+          + " · strength " + pct(s.strength)
           + (s.conflict_with_baseline ? " · opposes net pull" : ""));
       });
     } else {
