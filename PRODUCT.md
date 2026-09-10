@@ -87,9 +87,11 @@ tests and most demos run against.
   synthesizer narrative); the rest are deterministic arithmetic by design. Every Claude call
   carries a deterministic fallback of the same type, so a missing key, a rate limit, or a
   connection error degrades rather than fails.
-- Mock data is deterministic, seeded from `COSMIC_MART_SEED`, so a demo run is reproducible.
-  The forecast numbers are computed, never modelled — `--offline` and a live run are
-  numerically identical on the same seed.
+- Mock data is deterministic, seeded from `COSMIC_MART_SEED`, so an offline demo run is
+  reproducible. The synthesizer's arithmetic is computed rather than modelled, but Claude
+  supplies inputs to it upstream (the YoY annotation layer, signal direction and strength), so
+  a live run does not reproduce the offline numbers exactly. Demo against `--offline` when the
+  numbers on screen need to be predictable.
 - Secrets (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`) live only in a gitignored `.env` and
   must never appear in a tracked file.
 - The v1 scope is North America — four sub-markets (US, Canada, Mexico, Other North America)

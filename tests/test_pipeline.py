@@ -304,6 +304,50 @@ async def test_api_failure_falls_back_without_crashing(monkeypatch) -> None:
     assert len(run.order_recommendations) == 2
 
 
+async def test_request_build_failure_falls_back(monkeypatch) -> None:
+    """An empty .env surfaces as a TypeError at request-build time, not at
+    client construction. That must degrade, not take the run down."""
+    import anthropic
+
+    class _UnauthedMessages:
+        async def parse(self, **kwargs):
+            raise TypeError("Could not resolve authentication method.")
+
+    class _UnauthedClient:
+        messages = _UnauthedMessages()
+
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", lambda *a, **k: _UnauthedClient())
+
+    live = Reasoner(offline=False)
+    run = await Orchestrator(reasoner=live).run(all_skus()[:2])
+
+    assert live.call_count == 0
+    assert live.fallback_count > 0
+    # Config errors don't fix themselves mid-run: try once, then stop.
+    assert live.available is False
+    assert len(run.human_decisions) == len(run.order_recommendations) == 2
+
+
+async def test_unexpected_error_falls_back(monkeypatch) -> None:
+    """Any unexpected failure still yields a typed answer, never a crash."""
+    import anthropic
+
+    class _BrokenMessages:
+        async def parse(self, **kwargs):
+            raise ValueError("gateway returned something unexpected")
+
+    class _BrokenClient:
+        messages = _BrokenMessages()
+
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", lambda *a, **k: _BrokenClient())
+
+    live = Reasoner(offline=False)
+    run = await Orchestrator(reasoner=live).run(all_skus()[:2])
+
+    assert live.fallback_count > 0
+    assert len(run.order_recommendations) == 2
+
+
 async def test_agents_are_wired_to_the_shared_reasoner(offline: Reasoner) -> None:
     """Adding a key must light up the reasoning agents, so they must hold one."""
     orch = Orchestrator(reasoner=offline)

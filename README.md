@@ -194,9 +194,18 @@ weighted mean or a threshold check should not vary run to run.
 | Order Recommendation | no | Action, quantity, supplier, warehouse routing |
 | Human in the Loop | no | Threshold routing — modelling a human's decision would defeat the point |
 
-**The forecast numbers are never modelled.** The synthesizer computes the blend, the widening
-and the divergence itself and passes them to Claude as facts to explain, not values to choose.
-That keeps `--offline` and a live run numerically identical on the same seed.
+**The synthesizer's arithmetic is never modelled.** The blend, the widening and the divergence
+score are computed in code and handed to Claude as facts to explain, not values to choose. No
+model output is ever multiplied into the forecast at that stage.
+
+**But a live run is not numerically identical to `--offline`.** Claude supplies *inputs* to
+that arithmetic upstream — the YoY multipliers from the worker, and signal direction and
+strength from the signals branch — and those legitimately move the result. On seed 42,
+GAD-1001 comes out at a 258-unit reorder offline and 287 live, because Claude read the YoY
+annotation layer differently from the deterministic heuristic.
+
+What *is* guaranteed: `--offline` is reproducible run to run, so tests and demos are stable,
+and a live run degrades to exactly those offline values if the API is unreachable.
 
 Every call goes through `Reasoner.think`, which requires the caller to supply a deterministic
 fallback of the same Pydantic type. So there are exactly two outcomes: Claude answers, or the

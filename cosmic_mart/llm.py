@@ -132,6 +132,32 @@ class Reasoner:
             log.warning("Connection error; using fallback for %s", schema.__name__)
             self.fallback_count += 1
             return fallback
+        except TypeError as exc:
+            # The SDK raises TypeError at request-build time (not at client
+            # construction) when no credential resolves — an empty .env reaches
+            # us here, not in _get_client. Config errors don't fix themselves
+            # mid-run, so stop trying after the first one.
+            log.warning(
+                "Claude request could not be built (%s). Check ANTHROPIC_API_KEY "
+                "in .env — running on deterministic fallbacks. %s",
+                exc.__class__.__name__,
+                exc,
+            )
+            self._unavailable = True
+            self.fallback_count += 1
+            return fallback
+        except Exception as exc:
+            # Last resort. The contract this class exists to keep is that an
+            # agent always gets an answer of the right type, so an unexpected
+            # failure degrades the forecast rather than taking the run down.
+            log.warning(
+                "Unexpected %s calling Claude; using fallback for %s: %s",
+                exc.__class__.__name__,
+                schema.__name__,
+                exc,
+            )
+            self.fallback_count += 1
+            return fallback
 
         self.call_count += 1
 

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
+# Default precedence: a real environment variable beats .env. That is the
+# convention CI and containers rely on, so leave it alone.
 load_dotenv()
 
 DEFAULT_MODEL = "claude-opus-5"
