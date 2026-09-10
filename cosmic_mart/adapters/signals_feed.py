@@ -1,6 +1,13 @@
 """Mock live signal feeds: new drops + promos, large events, and news.
 
 Focused on North American market conditions. Deterministic per (seed, sku).
+
+Each template carries the categories it plausibly touches and the direction it
+plausibly pushes demand, so a severe-weather warning raises space heaters rather
+than pointing in a random direction. That matters twice over: it is what the
+deterministic fallback uses, and it is the material the Signal Processing Agent
+hands to Claude when a key is configured. A feed of headlines with random
+directions would give the model nothing real to reason about.
 """
 
 from __future__ import annotations
@@ -10,18 +17,47 @@ from typing import Any
 
 from ..models import SKU
 
-PROMOS = [
-    "Flash sale — 20% off", "New model launch", "Markdown clearance",
-    "Bundle promotion", "Loyalty double-points",
+# (headline, direction, categories it affects, (strength_low, strength_high))
+# "*" means the signal is category-agnostic.
+PROMOS: list[tuple[str, str, tuple[str, ...], tuple[float, float]]] = [
+    ("Flash sale — 20% off", "up", ("*",), (0.5, 0.8)),
+    ("New model launch", "up", ("gadgets",), (0.6, 0.95)),
+    ("Markdown clearance on prior generation", "up", ("gadgets", "appliances"), (0.4, 0.7)),
+    ("Bundle promotion", "up", ("home", "appliances"), (0.35, 0.6)),
+    ("Loyalty double-points week", "up", ("*",), (0.3, 0.5)),
+    # Not every promotional development helps us — a rival's promo pulls demand away.
+    ("Competitor undercut on price", "down", ("*",), (0.45, 0.75)),
+    ("Successor model announced — buyers wait", "down", ("gadgets",), (0.5, 0.85)),
 ]
-LARGE_EVENTS = [
-    "Super Bowl", "Major summer concert tour", "National holiday weekend",
-    "Regional trade show", "Back-to-school season",
+
+LARGE_EVENTS: list[tuple[str, str, tuple[str, ...], tuple[float, float]]] = [
+    ("Super Bowl", "up", ("gadgets",), (0.6, 0.9)),
+    ("Major summer concert tour", "up", ("gadgets",), (0.4, 0.7)),
+    ("National holiday weekend", "up", ("*",), (0.5, 0.8)),
+    ("Regional trade show", "up", ("appliances",), (0.3, 0.55)),
+    ("Back-to-school season", "up", ("gadgets", "home"), (0.5, 0.8)),
+    ("Major event cancelled", "down", ("gadgets",), (0.4, 0.7)),
+    ("Post-holiday demand trough", "down", ("*",), (0.4, 0.7)),
 ]
-NEWS = [
-    "Supply route disruption reported", "Viral social moment on the category",
-    "Severe weather warning", "Competitor recall", "Positive product review cycle",
+
+NEWS: list[tuple[str, str, tuple[str, ...], tuple[float, float]]] = [
+    ("Supply route disruption reported", "down", ("*",), (0.5, 0.85)),
+    ("Viral social moment on the category", "up", ("gadgets",), (0.6, 0.95)),
+    ("Severe weather warning", "up", ("appliances",), (0.55, 0.9)),
+    ("Competitor recall", "up", ("*",), (0.4, 0.7)),
+    ("Consumer spending pullback reported", "down", ("*",), (0.45, 0.75)),
+    ("Tariff increase announced on imports", "down", ("*",), (0.5, 0.8)),
+    ("Category safety concern reported", "down", ("appliances", "home"), (0.5, 0.85)),
 ]
+
+# Probability each feed produces a signal for a given item in the 24h window.
+_FIRE_PROBABILITY = {"promo": 0.6, "large_event": 0.45, "news": 0.4}
+
+
+def _relevant(
+    pool: list[tuple[str, str, tuple[str, ...], tuple[float, float]]], category: str
+) -> list[tuple[str, str, tuple[str, ...], tuple[float, float]]]:
+    return [t for t in pool if "*" in t[2] or category in t[2]]
 
 
 class SignalsFeedProvider:
@@ -36,19 +72,23 @@ class SignalsFeedProvider:
     async def observe(self, sku: SKU) -> dict[str, Any]:
         rng = self._rng(sku)
 
-        def maybe(pool: list[str], p: float) -> dict[str, Any] | None:
-            if rng.random() > p:
+        def maybe(pool: list, kind: str) -> dict[str, Any] | None:
+            candidates = _relevant(pool, sku.category)
+            if not candidates or rng.random() > _FIRE_PROBABILITY[kind]:
                 return None
+            headline, direction, _cats, (lo, hi) = rng.choice(candidates)
             return {
-                "headline": rng.choice(pool),
-                "strength": round(rng.uniform(0.3, 1.0), 2),
-                "direction": rng.choice(["up", "up", "down", "neutral"]),
+                "headline": headline,
+                "direction": direction,
+                "strength": round(rng.uniform(lo, hi), 2),
             }
 
         return {
             "sku_id": sku.id,
+            "item_name": sku.name,
+            "category": sku.category,
             "window_hours": 24,
-            "promo": maybe(PROMOS, 0.6),
-            "large_event": maybe(LARGE_EVENTS, 0.45),
-            "news": maybe(NEWS, 0.4),
+            "promo": maybe(PROMOS, "promo"),
+            "large_event": maybe(LARGE_EVENTS, "large_event"),
+            "news": maybe(NEWS, "news"),
         }

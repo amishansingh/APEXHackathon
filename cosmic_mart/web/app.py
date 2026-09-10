@@ -9,8 +9,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, StreamingResponse
 
+from ..adapters.inventory_db import InventoryDatabaseProvider
 from ..config import SETTINGS
-from ..data import MARKETS, SKUS, all_skus
+from ..data import MARKETS, SKUS
 from ..llm import Reasoner
 from ..orchestrator import Orchestrator
 
@@ -25,9 +26,13 @@ async def index() -> FileResponse:
 
 @app.get("/api/catalogue")
 async def catalogue() -> dict:
+    inventory = InventoryDatabaseProvider(SETTINGS.seed)
     return {
         "markets": [m.model_dump() for m in MARKETS],
         "skus": [s.model_dump() for s in SKUS],
+        "inventory": [r.model_dump() for r in await inventory.records()],
+        "trigger": "daily_schedule",
+        "human_review": "all_recommendations",
         "model": SETTINGS.model,
         "offline": SETTINGS.offline,
         "weights": {
@@ -51,10 +56,11 @@ async def run_stream(limit: int = 6, offline: bool = False) -> StreamingResponse
     orchestrator = Orchestrator(
         reasoner=Reasoner(offline=offline or SETTINGS.offline), on_progress=on_progress
     )
-    catalogue_slice = all_skus()[:limit]
 
     async def drive() -> None:
         try:
+            # Catalogue comes from the current-inventory database.
+            catalogue_slice = (await orchestrator.inventory.catalogue())[:limit]
             result = await orchestrator.run(catalogue_slice)
             payload = {
                 "event": "result",

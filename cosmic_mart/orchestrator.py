@@ -12,6 +12,7 @@ import asyncio
 from typing import Awaitable, Callable
 
 from .adapters.earth_sales import EarthSalesProvider
+from .adapters.inventory_db import InventoryDatabaseProvider
 from .adapters.regional_data import RegionalDataProvider
 from .adapters.signals_feed import SignalsFeedProvider
 from .agents import (
@@ -25,7 +26,6 @@ from .agents import (
     SignalReportAgent,
 )
 from .config import SETTINGS
-from .data import all_skus
 from .llm import Reasoner
 from .models import (
     MergedBaseline,
@@ -52,13 +52,19 @@ class Orchestrator:
         self.on_progress = on_progress
         seed = SETTINGS.seed if seed is None else seed
 
+        # The current-inventory database: the source of the SKU catalogue.
+        self.inventory = InventoryDatabaseProvider(seed)
+
         # Historical branch
         self.manager = HistoricalManager(worker_count=SETTINGS.worker_count)
         self.worker = HistoricalWorker(
             earth=EarthSalesProvider(seed),
             regional=RegionalDataProvider(seed),
             sparse_earth_threshold=SETTINGS.sparse_earth_threshold,
+            reasoner=self.reasoner,
         )
+        # Reduce step stays arithmetic on purpose — a weighted mean should not
+        # vary run to run, so no reasoner here.
         self.merge = MergeAndWeight(
             earth_weight=SETTINGS.earth_data_weight,
             regional_weight=SETTINGS.regional_data_weight,
@@ -66,12 +72,19 @@ class Orchestrator:
         )
 
         # Signals branch
-        self.signal_processing = SignalProcessingAgent(feed=SignalsFeedProvider(seed))
-        self.signal_report = SignalReportAgent()
+        self.signal_processing = SignalProcessingAgent(
+            feed=SignalsFeedProvider(seed),
+            inventory=self.inventory,
+            reasoner=self.reasoner,
+        )
+        self.signal_report = SignalReportAgent(reasoner=self.reasoner)
 
-        # Synthesis + outputs
+        # Synthesis + outputs. The order packager and the human gate are
+        # deterministic: thresholds and routing, not judgement.
         self.order_agent = OrderRecommendationAgent()
-        self.synthesizer = DemandSynthesizer(order_agent=self.order_agent)
+        self.synthesizer = DemandSynthesizer(
+            order_agent=self.order_agent, reasoner=self.reasoner
+        )
         self.gate = HumanGate()
 
     async def _emit(self, event: str, data: dict) -> None:
@@ -82,13 +95,23 @@ class Orchestrator:
             await result
 
     async def run(self, catalogue: list[SKU] | None = None) -> PipelineRun:
-        catalogue = catalogue or all_skus()
+        # The catalogue comes from the current-inventory database unless a
+        # caller pins one (CLI --sku / --limit, tests).
+        if catalogue is None:
+            catalogue = await self.inventory.catalogue()
         run = PipelineRun()
+        # Schedule-driven only — TriggerContext.reason is a single-member
+        # Literal, so there is no anomaly-event path to take here.
         run.trigger = TriggerContext(run_id=run.run_id, sku_catalogue=catalogue)
 
         await self._emit(
             "trigger",
-            {"run_id": run.run_id, "sku_count": len(catalogue), "reason": run.trigger.reason},
+            {
+                "run_id": run.run_id,
+                "sku_count": len(catalogue),
+                "reason": run.trigger.reason,
+                "scheduled_local_time": run.trigger.scheduled_local_time,
+            },
         )
 
         # Both branches run concurrently; synthesizer waits for both.
@@ -113,6 +136,8 @@ class Orchestrator:
             },
         )
 
+        # Every recommendation passes through human review before execution.
+        # Nothing bypasses this — there is no autonomous branch.
         decisions = self.gate.review(recommendations)
         run.human_decisions = decisions
 
@@ -121,7 +146,10 @@ class Orchestrator:
             {
                 "briefing": self.gate.briefing(decisions),
                 "approved": sum(1 for d in decisions if d.action == "approve"),
+                "reviewed": len(decisions),
+                "review_coverage": "all",
                 "llm_calls": self.reasoner.call_count,
+                "llm_fallbacks": self.reasoner.fallback_count,
             },
         )
         return run
@@ -178,7 +206,7 @@ class Orchestrator:
             },
         )
 
-        report = self.signal_report.run(processed)
+        report = await self.signal_report.run(processed)
         run.signal_contexts = report
         await self._emit(
             "sig_report",

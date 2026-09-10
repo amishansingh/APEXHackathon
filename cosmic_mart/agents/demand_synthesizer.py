@@ -8,7 +8,10 @@ forecast range widens to cover both scenarios (§7.4).
 
 from __future__ import annotations
 
+from pydantic import BaseModel, Field
+
 from ..config import SETTINGS
+from ..llm import Reasoner
 from ..models import (
     EscalationFlag,
     ForecastRange,
@@ -20,16 +23,49 @@ from .base import Agent
 from .order_recommendation import OrderRecommendationAgent
 
 # Fraction of baseline a full-strength net signal swings the implied forecast.
-_SIGNAL_SWING = 0.60
+# Calibrated against _HIST_VARIABILITY below: a saturated net pull lands just
+# under the 2σ divergence threshold, so agreement — however strong — reads as
+# agreement. Conflict has to come from the inputs actually disagreeing.
+_SIGNAL_SWING = 0.38
 # Assumed historical demand variability, used to normalise the divergence score.
 _HIST_VARIABILITY = 0.20
+
+_SYSTEM = """You are the Demand Synthesizer in Cosmic Mart's demand forecasting \
+pipeline, covering the North American market.
+
+The forecast numbers have already been computed and are NOT yours to change. \
+You are writing the explanation a human reviewer reads before approving, \
+modifying, rejecting or escalating the order.
+
+Write two things:
+- reasoning: one or two sentences on how the historical baseline (weighted 0.7) \
+and the live signals (weighted 0.3) combined into this forecast.
+- conflict_summary: when the inputs disagree, name both sides and say what the \
+widened range covers. Empty string when there is no conflict.
+
+The house rule is that conflict is preserved, not averaged. When historical and \
+signal views disagree the range is widened to span both scenarios rather than \
+split down the middle — explain the tension, never smooth it over. Be concrete \
+and cite the actual numbers you were given. No hedging, no filler."""
+
+
+class SynthesisNarrative(BaseModel):
+    """The reviewer-facing explanation. Numbers are computed, not modelled."""
+
+    reasoning: str = Field(default="", description="One or two sentences")
+    conflict_summary: str = Field(default="", description="Empty when no conflict")
 
 
 class DemandSynthesizer(Agent):
     name = "demand_synthesizer"
 
-    def __init__(self, order_agent: OrderRecommendationAgent | None = None):
+    def __init__(
+        self,
+        order_agent: OrderRecommendationAgent | None = None,
+        reasoner: Reasoner | None = None,
+    ):
         self.order_agent = order_agent or OrderRecommendationAgent()
+        self.reasoner = reasoner or Reasoner()
         self.hist_weight = SETTINGS.hist_branch_weight
         self.sig_weight = SETTINGS.sig_branch_weight
 
@@ -43,14 +79,14 @@ class DemandSynthesizer(Agent):
 
         for merged in baselines:
             signal_ctx = sig_by_sku.get(merged.sku.id)
-            recommendations.append(self._synthesize(merged, signal_ctx))
+            recommendations.append(await self._synthesize(merged, signal_ctx))
 
         widened = sum(1 for r in recommendations if r.forecast_range.widened)
         escalated = sum(1 for r in recommendations if r.escalation_flags)
         self._log(items=len(recommendations), widened=widened, escalated=escalated)
         return recommendations
 
-    def _synthesize(
+    async def _synthesize(
         self, merged: MergedBaseline, signal_ctx: PerItemSignalContext | None
     ) -> OrderRecommendation:
         baseline = merged.weighted_baseline
@@ -63,7 +99,9 @@ class DemandSynthesizer(Agent):
         hist_std = max(baseline * _HIST_VARIABILITY, 1.0)
         divergence = abs(signal_implied - baseline) / hist_std
 
-        signal_contradicts = self._contradicts(baseline, signal_implied, signal_ctx)
+        signal_contradicts = self._contradicts(
+            baseline, signal_implied, signal_ctx, divergence
+        )
         internal_conflict = bool(signal_ctx and signal_ctx.has_conflict)
         conflict = signal_contradicts or internal_conflict
 
@@ -90,10 +128,47 @@ class DemandSynthesizer(Agent):
 
         confidence = self._confidence(merged, conflict, divergence)
         flags = self._escalation_flags(merged, expected, confidence, divergence)
-        conflict_summary = self._conflict_summary(
-            baseline, signal_implied, signal_ctx, conflict
+
+        # §7.2 contract field. This is the only stage holding both the baseline
+        # and the signals, so it is the only stage that can honestly set it.
+        if signal_ctx:
+            for s in signal_ctx.signals:
+                s.conflict_with_baseline = signal_contradicts and s.direction != "neutral"
+
+        narrative = await self.reasoner.think(
+            system=_SYSTEM,
+            payload={
+                "item_id": merged.sku.id,
+                "item_name": merged.sku.name,
+                "historical_baseline_units": round(baseline, 1),
+                "signal_implied_units": round(signal_implied, 1),
+                "net_signal_pull": round(net_pull, 3),
+                "signal_rationale": signal_ctx.rationale if signal_ctx else "",
+                "signals": [s.model_dump() for s in signal_ctx.signals] if signal_ctx else [],
+                "forecast_range": forecast_range.model_dump(),
+                "range_widened": widened,
+                "conflict": conflict,
+                "divergence_sigma": round(divergence, 2),
+                "confidence": round(confidence, 3),
+                "hist_weight": self.hist_weight,
+                "sig_weight": self.sig_weight,
+                "data_quality_flags": merged.data_quality_flags,
+            },
+            instruction=(
+                "Write the reviewer-facing reasoning and, if the inputs "
+                "disagree, the conflict summary."
+            ),
+            schema=SynthesisNarrative,
+            fallback=SynthesisNarrative(
+                reasoning=self._reasoning(
+                    baseline, signal_implied, net_pull, conflict, widened
+                ),
+                conflict_summary=self._conflict_summary(
+                    baseline, signal_implied, signal_ctx, conflict
+                )
+                or "",
+            ),
         )
-        reasoning = self._reasoning(baseline, signal_implied, net_pull, conflict, widened)
 
         return self.order_agent.package(
             sku=merged.sku,
@@ -101,11 +176,11 @@ class DemandSynthesizer(Agent):
             forecast_range=forecast_range,
             confidence=confidence,
             divergence=divergence,
-            conflict_summary=conflict_summary,
+            conflict_summary=narrative.conflict_summary or None,
             escalation_flags=flags,
             hist_weight=self.hist_weight,
             sig_weight=self.sig_weight,
-            reasoning=reasoning,
+            reasoning=narrative.reasoning,
         )
 
     def _net_pull(self, ctx: PerItemSignalContext | None) -> float:
@@ -117,12 +192,26 @@ class DemandSynthesizer(Agent):
                 score += s.strength
             elif s.direction == "down":
                 score -= s.strength
-        # Clamp to [-1, 1] so a pile of signals can't run the forecast away.
-        return max(-1.0, min(1.0, score))
+        # Saturate rather than hard-clamp: agreeing signals reinforce each other
+        # with diminishing returns and the result stays inside (-1, 1). A hard
+        # clamp made any three same-direction signals indistinguishable from an
+        # extreme one, which then read as divergence downstream.
+        return score / (1.0 + abs(score))
 
     def _contradicts(
-        self, baseline: float, signal_implied: float, ctx: PerItemSignalContext | None
+        self,
+        baseline: float,
+        signal_implied: float,
+        ctx: PerItemSignalContext | None,
+        divergence: float,
     ) -> bool:
+        """Does the signal view genuinely contradict the historical baseline?
+
+        Strength alone is not contradiction — a strong signal that agrees with
+        the baseline is just a confident forecast. Contradiction is either
+        incoherence (the net direction and the implied move disagree) or a
+        divergence past the configured threshold (§7.4).
+        """
         if not ctx or ctx.net_direction == "neutral":
             return False
         # Signals say "up" but implied lands below baseline (or vice versa) — tension.
@@ -130,8 +219,7 @@ class DemandSynthesizer(Agent):
             return True
         if ctx.net_direction == "down" and signal_implied > baseline:
             return True
-        # A strong signal that pushes hard away from baseline is itself a divergence.
-        return abs(signal_implied - baseline) / max(baseline, 1.0) > 0.25
+        return divergence > SETTINGS.divergence_std_threshold
 
     def _confidence(self, merged: MergedBaseline, conflict: bool, divergence: float) -> float:
         confidence = 0.85

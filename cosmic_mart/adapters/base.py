@@ -4,7 +4,33 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from ..models import SKU
+from ..models import SKU, InventoryRecord
+
+
+@runtime_checkable
+class InventorySource(Protocol):
+    """The current-inventory database.
+
+    This is where the SKU catalogue comes from. The Signal Processing Agent needs
+    the item identification number and item name to scope signal matching to
+    active inventory, so both are first-class fields on every record rather than
+    something the agent has to infer.
+
+    To point at a real database, implement these three methods against it — no
+    agent code changes, since agents consume the records, not the source.
+    """
+
+    async def records(self) -> list[InventoryRecord]:
+        """Every current-inventory row."""
+        ...
+
+    async def catalogue(self) -> list[SKU]:
+        """The distinct items on hand, as SKUs — the unit of work for both branches."""
+        ...
+
+    async def item_index(self) -> dict[str, str]:
+        """{item_id: item_name} — the lookup the signal agents match against."""
+        ...
 
 
 @runtime_checkable

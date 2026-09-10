@@ -156,7 +156,7 @@ Between major sections: a brass line or a dashed cream hairline works.
 - Use ALL CAPS with wide tracking for labels, categories, and agent names
 - Lead with the world event → scoped products → recommendation narrative when presenting
 - Reference the confirmed figures: **$7.84B pre-tax loss**, **77% of revenue from gadgets**
-- Show the tension: conflicting signals, widened forecast ranges, money vs. carbon trade-offs
+- Show the tension: conflicting signals, widened forecast ranges, divergence flagged for review
 - Use sage green / rust as signal colours for approve / block outcomes
 
 **Don't:**
@@ -190,7 +190,7 @@ Between major sections: a brass line or a dashed cream hairline works.
 - **The differentiators to name:**
   - Conflict is preserved, not averaged — when signals disagree, the range widens and both
     are named
-  - Carbon is a real veto, not a badge — a financially positive action can be blocked by its
-    environmental cost
+  - The human gate is total, not a threshold — every recommendation is reviewed before
+    execution, not just the expensive or uncertain ones
 - **Audience assumption:** no supply-chain background. Every label and claim must be
   legible cold.

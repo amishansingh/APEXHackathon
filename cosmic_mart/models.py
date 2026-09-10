@@ -49,16 +49,43 @@ class SKUMarket(BaseModel):
         return f"{self.sku.id}@{self.market.code}"
 
 
+# --- Current inventory (the SKU catalogue source) ---------------------------
+
+
+class InventoryRecord(BaseModel):
+    """One row of the current-inventory database.
+
+    The Signal Processing Agent reads the catalogue from here rather than being
+    handed a hardcoded list: `item_id` and `item_name` are the fields it needs to
+    scope signal matching to active inventory. `InventorySource.catalogue()`
+    projects these rows back into `SKU` objects for the rest of the pipeline.
+    """
+
+    item_id: str = Field(description="Item identification number, e.g. GAD-1001")
+    item_name: str = Field(description="Human-readable item name")
+    category: str
+    sub_market: str
+    warehouse: str
+    on_hand_units: int = Field(ge=0)
+    inbound_units: int = Field(ge=0)
+
+
 # --- Trigger ----------------------------------------------------------------
 
 
 class TriggerContext(BaseModel):
-    """Fires the pipeline. Daily schedule drives both branches in parallel."""
+    """Fires the pipeline.
+
+    All pipeline runs are schedule-driven (spec §2). `reason` is a single-member
+    Literal on purpose: there is no anomaly-event trigger, and the type makes
+    reintroducing one a deliberate change rather than a passing string.
+    """
 
     run_id: str
     triggered_at: datetime = Field(default_factory=_now)
     sku_catalogue: list[SKU] = Field(default_factory=list)
-    reason: str = "daily_schedule"
+    reason: Literal["daily_schedule"] = "daily_schedule"
+    scheduled_local_time: str = "02:00"
 
 
 # --- Historical branch (§7.2 data contracts) --------------------------------
@@ -115,7 +142,13 @@ class SignalItem(BaseModel):
     strength: float = Field(ge=0.0, le=1.0)
     direction: Literal["up", "down", "neutral"]
     description: str = ""
+    # §7.2 contract field: set by the synthesizer, which is the only stage that
+    # holds the historical baseline to compare against.
     conflict_with_baseline: bool = False
+    # Set by the Signal Report Agent: this signal pulls against the net signal
+    # direction for its item. Intra-signal tension, not baseline tension — the
+    # two are different things and were previously conflated in one field.
+    opposes_net_pull: bool = False
 
 
 class PerItemSignalContext(BaseModel):
@@ -126,6 +159,8 @@ class PerItemSignalContext(BaseModel):
     has_conflict: bool = False
     # Net signal pull, +ve raises demand vs baseline. Preserved even under conflict.
     net_direction: Literal["up", "down", "neutral"] = "neutral"
+    # One sentence naming the drivers on each side; surfaced to the reviewer.
+    rationale: str = ""
 
 
 # --- Demand synthesizer + outputs -------------------------------------------

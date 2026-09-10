@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .config import SETTINGS
-from .data import MARKETS, SKUS, all_skus
+from .data import MARKETS, SKUS
 from .llm import Reasoner
 from .models import SKU, PipelineRun
 from .orchestrator import Orchestrator
@@ -27,8 +27,9 @@ _DECISION_STYLE = {
 }
 
 
-def _select(limit: int, sku: str | None) -> list[SKU]:
-    catalogue = all_skus()
+async def _select(orchestrator: Orchestrator, limit: int, sku: str | None) -> list[SKU]:
+    """The catalogue comes from the current-inventory database, then is filtered."""
+    catalogue = await orchestrator.inventory.catalogue()
     if sku:
         catalogue = [s for s in catalogue if s.id == sku.upper()]
     if not catalogue:
@@ -71,7 +72,6 @@ def run(
     save: str = typer.Option(None, help="Write the full run to this JSON path."),
 ) -> None:
     """Run one full pass of the demand forecasting pipeline."""
-    catalogue = _select(limit, sku)
     reasoner = Reasoner(offline=offline or SETTINGS.offline)
 
     async def progress(event: str, data: dict) -> None:
@@ -80,19 +80,23 @@ def run(
 
     orchestrator = Orchestrator(reasoner=reasoner, on_progress=progress if verbose else None)
 
-    mode = "offline" if reasoner.offline else reasoner.model
-    console.print(
-        Panel(
-            f"Processing {len(catalogue)} SKU(s) across a historical branch "
-            f"({SETTINGS.worker_count} workers) and a continuous signals branch.\n"
-            f"Mode: [bold]{mode}[/bold]",
-            title="Cosmic Mart",
-            border_style="blue",
+    async def drive() -> tuple[list[SKU], PipelineRun]:
+        catalogue = await _select(orchestrator, limit, sku)
+        console.print(
+            Panel(
+                f"Processing {len(catalogue)} item(s) from the current-inventory "
+                f"database across a historical branch ({SETTINGS.worker_count} "
+                f"workers) and a signals branch.\n"
+                f"Trigger: [bold]daily schedule[/bold]   Mode: [bold]"
+                f"{'offline' if reasoner.offline else reasoner.model}[/bold]",
+                title="Cosmic Mart",
+                border_style="blue",
+            )
         )
-    )
+        return catalogue, await orchestrator.run(catalogue)
 
     with console.status("Agents working..."):
-        result = asyncio.run(orchestrator.run(catalogue))
+        _catalogue, result = asyncio.run(drive())
 
     _render(result, orchestrator)
 
@@ -156,7 +160,9 @@ def _render(result: PipelineRun, orchestrator: Orchestrator) -> None:
     console.print(
         Panel(
             f"{orchestrator.gate.briefing(result.human_decisions)}\n"
-            f"LLM calls: {orchestrator.reasoner.call_count}",
+            f"Every recommendation reviewed — no autonomous execution.\n"
+            f"LLM calls: {orchestrator.reasoner.call_count}   "
+            f"deterministic fallbacks: {orchestrator.reasoner.fallback_count}",
             title="Summary",
             border_style="magenta",
         )

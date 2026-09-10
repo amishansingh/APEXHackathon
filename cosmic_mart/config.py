@@ -18,6 +18,10 @@ class Settings:
     seed: int = int(os.getenv("COSMIC_MART_SEED", "42"))
     offline: bool = os.getenv("COSMIC_MART_OFFLINE", "0") == "1"
 
+    # Reasoning effort per agent call. These are small, well-scoped extraction
+    # and judgement tasks, so medium is the sweet spot; raise for a sharper run.
+    llm_effort: str = os.getenv("COSMIC_MART_EFFORT", "medium")
+
     # Branch weights into the demand synthesizer (§7.3). Historical branch is the
     # anchor; signals nudge it. Configurable per market — new expansions with thin
     # Earth history may raise the regional analogue weight below.

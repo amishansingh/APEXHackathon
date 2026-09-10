@@ -16,12 +16,32 @@ class HumanGate(Agent):
     name = "human_gate"
 
     def review(self, recommendations: list[OrderRecommendation]) -> list[HumanReviewDecision]:
+        """Review every recommendation. There is no autonomous path around this.
+
+        The gate is total by construction: one decision per recommendation, in
+        order, with no branch that lets a recommendation reach execution
+        unreviewed. The post-condition below is deliberate — if a future change
+        ever filters this loop, the run fails loudly rather than quietly
+        executing something no human saw.
+        """
         decisions: list[HumanReviewDecision] = []
         for rec in recommendations:
             decisions.append(self._decide(rec))
+
+        if len(decisions) != len(recommendations):  # pragma: no cover - invariant
+            raise RuntimeError(
+                f"Human review is mandatory: {len(recommendations)} recommendation(s) "
+                f"produced only {len(decisions)} decision(s)."
+            )
+
         approved = sum(1 for d in decisions if d.action == "approve")
         escalated = sum(1 for d in decisions if d.action == "escalate")
-        self._log(reviewed=len(decisions), approved=approved, escalated=escalated)
+        self._log(
+            reviewed=len(decisions),
+            approved=approved,
+            escalated=escalated,
+            coverage="all_recommendations",
+        )
         return decisions
 
     def _decide(self, rec: OrderRecommendation) -> HumanReviewDecision:
